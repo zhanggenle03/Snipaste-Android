@@ -44,3 +44,20 @@
 - [QMUI](https://github.com/Tencent/QMUI_Android)，界面使用的是这个
 - [Easy_Float](https://github.com/princekin-f/EasyFloat)，悬浮窗的核心
 - [fluid-slider](https://github.com/Ramotion/fluid-slider-android) 底部的液态滑块
+
+## 构建
+
+项目已配置 GitHub Actions 自动构建，仓库下推送代码即可在 Actions 页面下载 Debug APK。
+
+- 推送任意分支:触发构建 Debug + Release APK,产物可在 Actions → Artifacts 下载
+- 推送 `v*` 标签(如 `v1.0.0`):自动发布 Release APK 到 GitHub Releases
+
+### 自定义 Release 签名(可选)
+
+如需签名自己的 Release APK,在 GitHub 仓库 `Settings → Secrets and variables → Actions` 添加以下 secret:
+
+| Secret 名 | 内容 | 生成方式 |
+|---|---|---|
+| `KEYSTORE_BASE64` | keystore 文件的 Base64 编码 | `base64 snipaste.keystore \| tr -d '\n'` |
+
+工作流会自动解码并存为 `app/snipaste.keystore`,再通过 `app/build.gradle` 中的 `signingConfigs` 引用。

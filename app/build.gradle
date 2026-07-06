@@ -1,7 +1,6 @@
 def qmui_arch_version = '2.0.0-alpha02'
 def javaVersion = JavaVersion.VERSION_1_8
 
-
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-android-extensions'
@@ -17,15 +16,30 @@ android {
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
+    compileOptions {
+        sourceCompatibility javaVersion
+        targetCompatibility javaVersion
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // 优先使用 CI 注入的自定义 keystore,否则 fallback 到 debug 签名
+            if (file('snipaste.keystore').exists()) {
+                signingConfig signingConfigs.myRelease
+            } else {
+                signingConfig signingConfigs.debug
+            }
         }
     }
-    compileOptions {
-        sourceCompatibility javaVersion
-        targetCompatibility javaVersion
+}
+
+signingConfigs {
+    myRelease {
+        storeFile file('snipaste.keystore')
+        storePassword 'snipaste'
+        keyAlias 'snipaste'
+        keyPassword 'snipaste'
     }
 }
 
