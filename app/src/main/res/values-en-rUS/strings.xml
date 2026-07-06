@@ -14,7 +14,6 @@
     <string name="help">help</string>
     <string name="helpText">Double-click the floating window to close</string>
     <string name="needFloatingPermission">floating window permission needed</string>
-    <string name="notification_content">Click for partial screenshot</string>
     <string name="opacity">opacity</string>
     <string name="pasteSectionTitle1">float text</string>
     <string name="pasteSegment_tab_picture">piture</string>
@@ -23,7 +22,6 @@
     <string name="pasteTextEditHint">input some text ...</string>
     <string name="paste_on_screen">float on the screen</string>
     <string name="paste_title_2">float picture</string>
-    <string name="screen_area">partial screen</string>
     <string name="setting">settings</string>
     <string name="tabSegment_item_1_content">first item</string>
     <string name="tabSegment_item_2_content">second item</string>

@@ -2,7 +2,6 @@ package com.to3g.snipasteandroid.fragment;
 
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
@@ -42,9 +41,6 @@ import com.to3g.snipasteandroid.lib.ImageUtil;
 import com.to3g.snipasteandroid.lib.SharePasteHelper;
 import com.to3g.snipasteandroid.lib.TextBitmapUtil;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
-import com.to3g.snipasteandroid.receiver.MyReceiver;
-import com.to3g.snipasteandroid.receiver.MyReceiverHandler;
-import com.to3g.snipasteandroid.service.NotificationService;
 import com.to3g.snipasteandroid.view.ScaleImage;
 
 import java.io.File;
@@ -55,10 +51,6 @@ import java.util.Objects;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
-import eu.bolt.screenshotty.ScreenshotBitmap;
-import eu.bolt.screenshotty.ScreenshotManager;
-import eu.bolt.screenshotty.ScreenshotManagerBuilder;
-import eu.bolt.screenshotty.ScreenshotResult;
 import kotlin.Unit;
 
 @LatestVisitRecord
@@ -92,10 +84,6 @@ public class HomeFragment extends BaseFragment {
     private List<String> floatingImages = new ArrayList<>();
     private float opacity = 1.0f;
 
-    private ScreenshotManager screenshotManager;
-    private int REQUEST_SCREENSHOT_PERMISSION = 888;
-    private MyReceiver myReceiver;
-
 
     @Override
     protected View onCreateView() {
@@ -113,21 +101,7 @@ public class HomeFragment extends BaseFragment {
             return Unit.INSTANCE;
         });
         setFloatViewOpacity();
-        initReceiver();
         return root;
-    }
-
-    private void initReceiver () {
-        myReceiver = new MyReceiver();
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(MyReceiver.ACTION_SCREENSHOT);
-        getContext().registerReceiver(myReceiver, intentFilter);
-        myReceiver.setMyReceiverHandler(new MyReceiverHandler() {
-            @Override
-            public void doScreenshot() {
-                Toast.makeText(getContext(), "doScreenshot", Toast.LENGTH_SHORT).show();
-            }
-        });
     }
 
     private void setFloatViewOpacity () {
@@ -271,29 +245,6 @@ public class HomeFragment extends BaseFragment {
         }
     }
 
-    /**
-     * When click the screenButton
-     */
-    @OnClick(R.id.screenButton)
-    protected void onScreenButtonClick () {
-//        pasteScreenshot();
-        Intent intent = new Intent(getContext(), NotificationService.class);
-        getContext().startService(intent);
-    }
-
-    private void pasteScreenshot () {
-        screenshotManager = new ScreenshotManagerBuilder(getActivity())
-                .withPermissionRequestCode(REQUEST_SCREENSHOT_PERMISSION)
-                .build();
-        ScreenshotResult screenshotResult = screenshotManager.makeScreenshot();
-        screenshotResult.observe((screenshot) -> {
-            initImageView(((ScreenshotBitmap) screenshot).getBitmap());
-            return Unit.INSTANCE;
-        }, (throwable -> {
-            return Unit.INSTANCE;
-        }));
-    }
-
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -303,7 +254,6 @@ public class HomeFragment extends BaseFragment {
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         Log.d(TAG, "onActivityResult: ");
-        screenshotManager.onActivityResult(requestCode, requestCode, data);
     }
 
     @Override
