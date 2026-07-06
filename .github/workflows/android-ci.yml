@@ -30,6 +30,19 @@ jobs:
           java-version: '11'
           cache: 'gradle'
 
+      - name: Set up Android SDK
+        # 用专用 Action 接管 Android SDK,避免 Runner 预装环境里畸形版本(如 "34x")导致
+        # AGP 加载 SDK 元数据时抛 NumberFormatException
+        uses: android-actions/setup-android@v3
+        with:
+          # 显式锁定 SDK 组件版本,不用 latest,避免被环境预装版本干扰
+          cmdline-tools-version: '11076708'
+          platforms: 'android-29'
+          build-tools: '29.0.3'
+          # 不接受 SDK 预览版,避免 alpha/beta 后缀污染
+          cache-disabled: false
+          cache-key: 'android-sdk-v1'
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
