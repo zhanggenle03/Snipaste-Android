@@ -275,7 +275,10 @@ public class HomeFragment extends BaseFragment {
                     public void hide(View view) { }
 
                     @Override
-                    public void dismiss() { }
+                    public void dismiss() {
+                        // 贴图浮窗被销毁时，务必带走其透明度滑块，避免残留
+                        SharePasteHelper.dismissOpacitySlider(path);
+                    }
 
                     @Override
                     public void touchEvent(View view, MotionEvent event) { }
@@ -353,7 +356,10 @@ public class HomeFragment extends BaseFragment {
                     public void hide(View view) { }
 
                     @Override
-                    public void dismiss() { }
+                    public void dismiss() {
+                        // 贴图浮窗被销毁时，务必带走其透明度滑块，避免残留
+                        SharePasteHelper.dismissOpacitySlider(tagName);
+                    }
 
                     @Override
                     public void touchEvent(View view, MotionEvent event) { }

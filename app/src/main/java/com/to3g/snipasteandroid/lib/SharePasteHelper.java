@@ -254,9 +254,10 @@ public class SharePasteHelper {
     }
 
     /**
-     * 为单个贴图接上「长按贴图本体 → 左侧弹出独立竖向透明度滑块浮窗，再次长按关闭」的交互。
+     * 为单个贴图接上「长按贴图本体 → 旁侧弹出独立竖向透明度滑块浮窗，再次长按关闭」的交互。
      * 滑块是独立的 EasyFloat 浮窗（不影响贴图自身窗口的尺寸与缩放锚点），只作用于该贴图自身
-     * （imageOutterShadow），各贴图互不影响。滑块会通过「贴图拖拽回调 + 贴图布局监听」实时跟随贴图移动。
+     * （imageOutterShadow），各贴图互不影响。初始与移动时都按「贴图左右两侧谁有空间」自动选择摆放侧，
+     * 并通过「贴图拖拽回调 + 贴图布局监听」实时跟随贴图移动。
      */
     public static void attachOpacitySlider(@NonNull Activity activity, @NonNull String imageTag,
                                            @NonNull View stickerBody) {
@@ -268,14 +269,13 @@ public class SharePasteHelper {
                 dismissOpacitySlider(imageTag);
                 return true;
             }
-            // 先按贴图当前位置摆放，随后由 repositionSlider 校正到左侧并随拖拽/缩放跟随
-            int[] loc = new int[2];
-            stickerBody.getLocationOnScreen(loc);
-
+            // 先放到屏幕外(-100,-100)，等滑块自身布局完成、拿到真实宽高后，再用 repositionSlider
+            // 精准定位到贴图旁侧（按左右空间自动选择）。避免初始一闪压在贴图上——之前直接 setLocation
+            // 用了贴图坐标，且测量未完成时宽高为 0，导致算出的坐标落在贴图正中。
             EasyFloat.with(activity)
                     .setLayout(R.layout.opacity_slider)
                     .setShowPattern(ShowPattern.ALL_TIME)
-                    .setLocation(loc[0], loc[1])
+                    .setLocation(-100, -100)
                     .setTag(sliderTag)
                     .setDragEnable(false)
                     .show();
@@ -306,15 +306,23 @@ public class SharePasteHelper {
             sliderLayoutListeners.put(imageTag, listener);
             stickerBody.getViewTreeObserver().addOnGlobalLayoutListener(listener);
 
-            // 初次摆放（等滑块自身布局完成后再算一次，保证尺寸准确）
-            repositionSlider(imageTag);
-            sliderView.post(() -> repositionSlider(imageTag));
+            // 关键：等滑块自身完成布局（getWidth()/getHeight() > 0）再定位，保证不压在贴图上
+            sliderView.getViewTreeObserver().addOnGlobalLayoutListener(
+                    new ViewTreeObserver.OnGlobalLayoutListener() {
+                        @Override
+                        public void onGlobalLayout() {
+                            if (sliderView.getWidth() > 0 && sliderView.getHeight() > 0) {
+                                repositionSlider(imageTag);
+                                sliderView.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                            }
+                        }
+                    });
             return true;
         });
     }
 
     /**
-     * 把滑块浮窗重新摆放到贴图左侧（贴图在屏幕上移动/缩放后调用）。
+     * 把滑块浮窗重新摆放到贴图旁侧（左侧优先，左侧无空间则放右侧；贴图在屏幕上移动/缩放后调用）。
      * EasyFloat 1.3.0 没有运行时改位置的 API，这里直接改 WindowManager 的 LayoutParams。
      */
     public static void repositionSlider(@NonNull String imageTag) {
