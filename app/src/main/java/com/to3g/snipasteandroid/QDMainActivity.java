@@ -6,6 +6,7 @@ import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 
 import com.qmuiteam.qmui.arch.QMUIFragment;
