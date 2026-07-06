@@ -38,14 +38,14 @@ public class ScaleImage extends ImageView {
         getParent().requestDisallowInterceptTouchEvent(true);
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
-                lastX = event.getX();
-                lastY = event.getY();
+                lastX = event.getRawX();
+                lastY = event.getRawY();
                 break;
             case MotionEvent.ACTION_MOVE:
-                float dx = event.getX() - lastX;
-                float dy = event.getY() - lastY;
-                lastX = event.getX();
-                lastY = event.getY();
+                float dx = event.getRawX() - lastX;
+                float dy = event.getRawY() - lastY;
+                lastX = event.getRawX();
+                lastY = event.getRawY();
                 if (onScaledListener != null) {
                     onScaledListener.onScaled(dx, dy, event);
                 }
