@@ -80,7 +80,6 @@ public class HomeFragment extends BaseFragment {
     @BindView(R.id.slider)
     FluidSlider slider;
 
-    private List<String> floatings = new ArrayList<>();
     private List<String> floatingImages = new ArrayList<>();
     private float opacity = 1.0f;
 
@@ -105,13 +104,7 @@ public class HomeFragment extends BaseFragment {
     }
 
     private void setFloatViewOpacity () {
-        // 遍历 HomeFragment 自身创建的浮窗
-        for (String content: floatings) {
-            View view = EasyFloat.getAppFloatView(content);
-            if (view != null) {
-                view.findViewById(R.id.textBackground).setAlpha(opacity);
-            }
-        }
+        // 遍历本 Fragment 创建的浮窗（图片与文字转图均为 image_paste 布局）
         for (String path: floatingImages) {
             View view = EasyFloat.getAppFloatView(path);
             if (view != null) {
@@ -119,13 +112,7 @@ public class HomeFragment extends BaseFragment {
             }
         }
         // 遍历 SharePasteHelper 创建的浮窗
-        for (String tag: SharePasteHelper.getHelperFloatTags()) {
-            View view = EasyFloat.getAppFloatView(tag);
-            if (view != null) {
-                view.findViewById(R.id.textBackground).setAlpha(opacity);
-            }
-        }
-        for (String tag: SharePasteHelper.getHelperImageTags()) {
+        for (String tag : SharePasteHelper.getHelperImageTags()) {
             View view = EasyFloat.getAppFloatView(tag);
             if (view != null) {
                 view.findViewById(R.id.imageOutterShadow).setAlpha(opacity);
@@ -462,28 +449,17 @@ public class HomeFragment extends BaseFragment {
         mTopBar.setTitle(getString(R.string.app_name));
         mTopBar.addRightImageButton(R.mipmap.icon_topbar_overflow, R.id.topbar_right_change_button)
                 .setOnClickListener(v -> {
-                   clearAllTextFloatViews();
+                   clearAllFloatViews();
                 });
     }
 
     /**
-     * Clear all text floating windows
+     * 清空所有浮窗（本 Fragment 与 SharePasteHelper 创建的）
      */
-    private void clearAllTextFloatViews () {
-        for (String content : floatings) {
-            if (EasyFloat.getAppFloatView(content) != null) {
-                EasyFloat.dismissAppFloat(content);
-            }
-        }
+    private void clearAllFloatViews () {
         for (String path: floatingImages) {
             if (EasyFloat.getAppFloatView(path) != null) {
                 EasyFloat.dismissAppFloat(path);
-            }
-        }
-        // 清理 SharePasteHelper 创建的浮窗
-        for (String tag : SharePasteHelper.getHelperFloatTags()) {
-            if (EasyFloat.getAppFloatView(tag) != null) {
-                EasyFloat.dismissAppFloat(tag);
             }
         }
         for (String tag : SharePasteHelper.getHelperImageTags()) {
@@ -491,7 +467,6 @@ public class HomeFragment extends BaseFragment {
                 EasyFloat.dismissAppFloat(tag);
             }
         }
-        SharePasteHelper.getHelperFloatTags().clear();
         SharePasteHelper.getHelperImageTags().clear();
     }
 
