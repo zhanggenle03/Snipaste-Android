@@ -35,10 +35,16 @@ jobs:
 
       - name: Decode Android signing keystore (optional)
         # 仓库内不直接放 keystore,通过 BASE64 编码的 secret 在 CI 中还原
-        # 如果未配置 KEYSTORE_BASE64 secret,此步骤会自动跳过
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        # 如果未配置 KEYSTORE_BASE64 secret,base64 解码会失败,脚本会优雅退出(不会让 build 失败)
+        # GitHub Actions 限制:secrets.* 不能直接用于 if 条件,所以通过 env 注入后再判断
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/snipaste.keystore
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "KEYSTORE_BASE64 not set, skipping keystore decoding (will use debug signing)"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > app/snipaste.keystore
           ls -la app/snipaste.keystore
 
       - name: Build with Gradle
