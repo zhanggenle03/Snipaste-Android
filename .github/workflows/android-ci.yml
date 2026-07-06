@@ -110,16 +110,14 @@ jobs:
           ls -la artifacts/ || echo "No artifacts"
           echo "===== build/outputs tree ====="
           ls -la app/build/outputs/ 2>/dev/null || echo "app/build/outputs does not exist"
-          # 给 APK 起个固定文件名(去掉 build 目录层级,产物名更稳定)
+          # 重命名为简洁名字:snipaste-{debug|release}.apk
           cd artifacts
           for apk in *.apk; do
             if [ -f "$apk" ]; then
-              # 提取原始信息(从相对路径拼出简单名字)
-              base=$(basename "$apk" .apk)
               if [[ "$apk" == *"debug"* ]]; then
-                mv "$apk" "snipaste-${GITHUB_SHA::7}-debug.apk" 2>/dev/null || mv "$apk" "snipaste-debug.apk"
+                mv "$apk" "snipaste-debug.apk" 2>/dev/null
               elif [[ "$apk" == *"release"* ]]; then
-                mv "$apk" "snipaste-${GITHUB_SHA::7}-release.apk" 2>/dev/null || mv "$apk" "snipaste-release.apk"
+                mv "$apk" "snipaste-release.apk" 2>/dev/null
               fi
             fi
           done
