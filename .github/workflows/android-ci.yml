@@ -68,17 +68,30 @@ jobs:
 
       - name: Decode Android signing keystore (optional)
         # 仓库内不直接放 keystore,通过 BASE64 编码的 secret 在 CI 中还原
-        # 如果未配置 KEYSTORE_BASE64 secret,base64 解码会失败,脚本会优雅退出(不会让 build 失败)
-        # GitHub Actions 限制:secrets.* 不能直接用于 if 条件,所以通过 env 注入后再判断
+        # 如果未配置 KEYSTORE_BASE64 secret,优雅退出(走 debug 签名)
+        # 兼容性:支持带/不带 PEM 头尾的 base64,自动剥掉换行/CRLF/空白
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
             echo "KEYSTORE_BASE64 not set, skipping keystore decoding (will use debug signing)"
             exit 0
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > app/snipaste.keystore
+          # 剥掉 PEM 头尾 + 所有空白/换行/制表符,只留 base64 主体再解码
+          echo "$KEYSTORE_BASE64" \
+            | grep -v "^-----BEGIN" \
+            | grep -v "^-----END" \
+            | tr -d '\r\n \t' \
+            | base64 -d > app/snipaste.keystore
           ls -la app/snipaste.keystore
+          # 立即用 keytool 验证生成的 keystore 可读,密码不对/文件坏掉会在这里挂掉
+          STORE_PASS="${KEYSTORE_PASSWORD:-snipaste}"
+          if ! keytool -list -keystore app/snipaste.keystore -storepass "$STORE_PASS" >/dev/null 2>&1; then
+            echo "ERROR: generated keystore is invalid or password mismatch"
+            exit 1
+          fi
+          echo "Keystore is valid."
 
       - name: Build with Gradle
         # 启用 --info 拿到具体失败 task 与依赖解析日志
