@@ -127,10 +127,10 @@ jobs:
 
       - name: Upload APK artifacts
         if: always()
-        # 注意:upload-artifact v4 的默认行为是 archive: true,
-        # 哪怕只有一个 APK 文件也会被包成 zip 再上传(下下来是 snipaste-android-apk.zip)
-        # 这里改为 archive: false + 直接传 APK 路径,产物就是裸 .apk
-        # 限制:archive: false 只能传单个文件,所以我们只上传 debug APK(用户最常用)
+        # upload-artifact v4 + archive: false 仍然在某些 Runner 上不生效(用户反馈仍是 zip)
+        # 改用通用方案:把 APK 重命名到一个固定路径,然后用 gh release-style 走 Releases
+        # 但更稳妥的方案是:直接用 Release action 上传(不打包)
+        # 这里使用 upload-artifact 的 archive: false,这是官方推荐做法
         uses: actions/upload-artifact@v4
         with:
           name: snipaste-debug
@@ -140,7 +140,6 @@ jobs:
           retention-days: 30
 
       - name: Upload release APK
-        # release APK 单独一个 step,确保 archive: false 单文件上传
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -150,14 +149,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Publish Release
-        # 仅在推送 v* 标签时触发
+      - name: Publish to GitHub Packages / direct download
+        # 上传到 Releases 时不打包成 zip,直接传 .apk 原文件
+        # softprops/action-gh-release 的 files 字段会原样上传,不会自动 zip
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          # 直接上传 .apk 文件,不再压缩为 zip
           files: |
-            artifacts/*.apk
+            artifacts/snipaste-debug.apk
+            artifacts/snipaste-release.apk
           generate_release_notes: true
           fail_on_unmatched_files: false
         env:
