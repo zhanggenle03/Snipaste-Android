@@ -81,10 +81,11 @@ jobs:
           ls -la app/snipaste.keystore
 
       - name: Build with Gradle
+        # 启用 --info 拿到具体失败 task 与依赖解析日志,定位 51s 失败的真实原因
         run: |
-          ./gradlew assembleDebug --no-daemon --stacktrace
-          # 尝试构建 release(无签名时用 debug 签名占位也能成功)
-          ./gradlew assembleRelease --no-daemon --stacktrace || echo "Release build skipped or failed, continuing..."
+          ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
+          # 同时尝试 release
+          ./gradlew assembleRelease --no-daemon --stacktrace --info 2>&1 | tee -a build.log || echo "Release build skipped or failed, continuing..."
 
       - name: Collect built APKs
         if: always()
