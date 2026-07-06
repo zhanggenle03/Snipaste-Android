@@ -82,14 +82,18 @@ jobs:
 
       - name: Build with Gradle
         # 启用 --info 拿到具体失败 task 与依赖解析日志
+        # 失败时只打印最后 300 行,避免刷屏(上次出现 1000+ 行 Resource missing 噪音)
         run: |
           set -o pipefail
           ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
           EXIT_CODE=${PIPESTATUS[0]}
           echo "===== assembleDebug exit code: $EXIT_CODE ====="
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "===== build.log tail (last 200 lines) ====="
-            tail -200 build.log
+            echo "===== Searching for actual error in build.log ====="
+            # 跳过 Resource missing 噪音,定位真正的 FAILED 任务
+            grep -E "FAILED|Caused by:|Could not|Execution failed for task|> Task :.*FAILED" build.log | head -50
+            echo "===== build.log tail (last 300 lines) ====="
+            tail -300 build.log
             exit $EXIT_CODE
           fi
 
