@@ -51,14 +51,25 @@ public class SharePasteHelper {
     private static final Map<String, ViewTreeObserver.OnGlobalLayoutListener> sliderLayoutListeners = new HashMap<>();
     /** 贴图 tag -> 创建该贴图时所在的 Activity（强引用保存；文字贴图所在的瞬态 Activity 一旦被 WeakReference 回收，双击时就拿不到 Activity 而弹不出滑块。该 Activity 对象能成功创建贴图浮窗，就能成功创建滑块浮窗） */
     private static final Map<String, Activity> sliderActivities = new HashMap<>();
-    /** 贴图 tag -> 上次点击时间（在浮窗 touchEvent 回调里做双击判定，双击弹出/收起透明度滑块） */
-    private static final Map<String, Long> lastTapTimes = new HashMap<>();
+    /** 贴图 tag -> 双击检测状态（在浮窗 touchEvent 回调里做「完成态双击」判定，双击弹出/收起透明度滑块） */
+    private static final Map<String, TapState> tapStates = new HashMap<>();
 
     /** 由 helper 创建的图片浮窗 tag 列表 */
     private static final List<String> helperImageTags = new ArrayList<>();
 
-    // 双击判定阈值：两次 ACTION_DOWN 间隔小于该值即视为双击
+    // 双击判定阈值：两次「按下→抬起且几乎未移动」的完整点击，第二次抬手距第一次抬手小于该值即视为双击
     private static final long DOUBLE_TAP_TIME = 300;
+    // 判定为「点击」而非「拖拽」的位移容差(px)：超过则视为拖拽，取消待定的第一次点击
+    private static final int TAP_SLOP = 24;
+
+    /** 浮窗 touchEvent 里的双击检测状态 */
+    private static class TapState {
+        boolean firstTapPending;  // 已记录一次完成的点击，等待可能的第二次
+        long firstTapUpTime;      // 第一次点击抬手时刻
+        float downX, downY;       // 本次手势落点
+        boolean moved;            // 本次手势是否发生明显移动（拖拽）
+    }
+
 
 
     // ---------- 对外接口 ----------
@@ -401,19 +412,51 @@ public class SharePasteHelper {
     }
 
     /**
-     * 在浮窗的 touchEvent 回调里做「双击」判定：两次 ACTION_DOWN 间隔小于 DOUBLE_TAP_TIME 即触发
-     * toggleOpacitySlider（弹出/收起透明度滑块）。放在浮窗层级而非 View 层级，可彻底避开内部 View
-     * 吞事件 / 框架手势被拖拽取消的问题。原「长按」交互已改为「双击」。
+     * 在浮窗的 touchEvent 回调里做「完成态双击」判定：必须是两次「按下→抬起且几乎未移动」的完整点击，
+     * 且第二次抬手距第一次抬手 < DOUBLE_TAP_TIME，才触发 toggleOpacitySlider（弹出/收起透明度滑块）。
+     * 放在浮窗层级而非 View 层级，可彻底避开内部 View 吞事件 / 框架手势被拖拽取消的问题。
+     * 相比「仅比较两次 ACTION_DOWN 的时间」，完成态判定能避免单次轻触（被浮窗分发成多次相邻 DOWN、
+     * 或残留上次手势时间戳）误触发滑块。原「长按」交互已改为「双击」。
      */
     public static void handleFloatTouch(@NonNull String tag, @NonNull MotionEvent event) {
-        if (event.getAction() != MotionEvent.ACTION_DOWN) return;
-        long now = System.currentTimeMillis();
-        Long prev = lastTapTimes.get(tag);
-        if (prev != null && (now - prev) < DOUBLE_TAP_TIME) {
-            lastTapTimes.remove(tag);
-            toggleOpacitySlider(tag); // 双击：弹出/收起透明度滑块
-        } else {
-            lastTapTimes.put(tag, now);
+        int action = event.getAction();
+        TapState s = tapStates.get(tag);
+        if (s == null) {
+            s = new TapState();
+            tapStates.put(tag, s);
+        }
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+                s.downX = event.getRawX();
+                s.downY = event.getRawY();
+                s.moved = false;
+                break;
+            case MotionEvent.ACTION_MOVE: {
+                float dist = (float) Math.hypot(event.getRawX() - s.downX, event.getRawY() - s.downY);
+                if (dist > TAP_SLOP) {
+                    s.moved = true;
+                    s.firstTapPending = false; // 拖拽：取消待定的第一次点击
+                }
+                break;
+            }
+            case MotionEvent.ACTION_UP: {
+                long now = System.currentTimeMillis();
+                if (!s.moved) {
+                    // 这是一次完成的点击
+                    if (s.firstTapPending && (now - s.firstTapUpTime) < DOUBLE_TAP_TIME) {
+                        s.firstTapPending = false;
+                        toggleOpacitySlider(tag); // 双击：弹出/收起透明度滑块
+                    } else {
+                        s.firstTapPending = true;
+                        s.firstTapUpTime = now;
+                    }
+                }
+                break;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                s.firstTapPending = false;
+                s.moved = false;
+                break;
         }
     }
 
@@ -478,7 +521,7 @@ public class SharePasteHelper {
      */
     public static void hideOpacitySlider(@NonNull String imageTag) {
         String sliderTag = imageTag + "_opacity";
-        lastTapTimes.remove(imageTag); // 清掉本次双击的待判定状态，避免重复触发
+        tapStates.remove(imageTag); // 清掉本次双击的待判定状态，避免重复触发
         try {
             EasyFloat.dismissAppFloat(sliderTag);
         } catch (Exception e) {
@@ -490,7 +533,7 @@ public class SharePasteHelper {
     public static void dismissOpacitySlider(@NonNull String imageTag) {
         String sliderTag = imageTag + "_opacity";
         // 清理双击检测状态
-        lastTapTimes.remove(imageTag);
+        tapStates.remove(imageTag);
         // 移除布局监听，避免泄漏
         ViewTreeObserver.OnGlobalLayoutListener listener = sliderLayoutListeners.remove(imageTag);
         View body = sliderStickerBodies.remove(imageTag);
