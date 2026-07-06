@@ -29,6 +29,7 @@ import com.lzf.easyfloat.permission.PermissionUtils;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
 import com.to3g.snipasteandroid.Listener.DoubleClickListener;
+import com.to3g.snipasteandroid.QDApplication;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.view.ScaleImage;
 
