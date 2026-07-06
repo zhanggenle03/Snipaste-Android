@@ -334,9 +334,11 @@ public class SharePasteHelper {
      */
     public static void toggleOpacitySlider(@NonNull String imageTag) {
         String sliderTag = imageTag + "_opacity";
-        // 已显示则关闭
+        // 已显示则关闭。注意：这里只收起滑块浮窗，【不】清除贴图本体/Activity 引用
+        // （用 hideOpacitySlider），否则同一张贴图下次长按会因 body 为 null 而弹不出滑块。
+        // 贴图被真正销毁时才走 dismissOpacitySlider 做完整清理。
         if (EasyFloat.getAppFloatView(sliderTag) != null) {
-            dismissOpacitySlider(imageTag);
+            hideOpacitySlider(imageTag);
             return;
         }
         // 优先用创建贴图时的 Activity（强引用，永不为 null）；万一缺失则兜底取当前前台 Activity。
@@ -505,7 +507,23 @@ public class SharePasteHelper {
         }
     }
 
-    /** 关闭某个贴图对应的透明度滑块浮窗（贴图被关闭/清空时调用） */
+    /**
+     * 仅收起透明度滑块浮窗（用户再次长按关闭时调用）。
+     * 与 dismissOpacitySlider 的区别：这里【不】移除 sliderStickerBodies / sliderActivities /
+     * sliderLayoutListeners 等贴图本体引用，因为贴图本身还活着，下次长按仍需用它们重新弹出滑块。
+     * 只清理本次长按判定状态并 dismiss 浮窗。贴图被真正销毁时仍走 dismissOpacitySlider 做完整清理。
+     */
+    public static void hideOpacitySlider(@NonNull String imageTag) {
+        String sliderTag = imageTag + "_opacity";
+        lpStates.remove(imageTag); // 清掉本次长按已触发的状态，避免重复触发
+        try {
+            EasyFloat.dismissAppFloat(sliderTag);
+        } catch (Exception e) {
+            Log.e(TAG, "hideOpacitySlider failed: " + e.getMessage());
+        }
+    }
+
+    /** 关闭某个贴图对应的透明度滑块浮窗（贴图被关闭/清空时调用，做完整清理以防泄漏） */
     public static void dismissOpacitySlider(@NonNull String imageTag) {
         String sliderTag = imageTag + "_opacity";
         // 清理长按检测状态
