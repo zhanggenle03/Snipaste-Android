@@ -154,18 +154,24 @@ public class SharePasteHelper {
         TextView textView = view.findViewById(R.id.textView);
         textView.setText(content);
 
-        // 文字贴图支持右下角拖拽缩放（与图片贴图一致）
-        final View textRoot = view.findViewById(R.id.shadowLayout);
+        // 文字贴图支持右下角拖拽缩放（与图片贴图一致，且文字始终完整显示）
+        final View textRoot = view.findViewById(R.id.textBackground);
         ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
         final float density = view.getResources().getDisplayMetrics().density;
         final int minWidthPx = (int) (60 * density);
-        final int minHeightPx = (int) (40 * density);
         scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
             @Override
             public void onScaled(float x, float y, MotionEvent event) {
                 ViewGroup.LayoutParams lp = textRoot.getLayoutParams();
-                lp.width = Math.max((int) (lp.width + x), minWidthPx);
-                lp.height = Math.max((int) (lp.height + y), minHeightPx);
+                int newWidth = Math.max((int) (lp.width + x), minWidthPx);
+                // 测量当前宽度下文本所需高度，保证文字始终完整显示、不被裁切
+                textView.measure(
+                        View.MeasureSpec.makeMeasureSpec(newWidth, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+                int neededHeight = textView.getMeasuredHeight();
+                int newHeight = Math.max((int) (textRoot.getHeight() + y), neededHeight);
+                lp.width = newWidth;
+                lp.height = newHeight;
                 textRoot.setLayoutParams(lp);
             }
 
