@@ -133,63 +133,14 @@ public class SharePasteHelper {
         }
 
         String tag = "share_text_" + content.hashCode();
-        View existingView = EasyFloat.getAppFloatView(tag);
-        if (existingView != null) {
+        if (EasyFloat.getAppFloatView(tag) != null) {
             Toast.makeText(activity, activity.getText(R.string.textFloated), Toast.LENGTH_SHORT).show();
             return;
         }
 
-        EasyFloat
-                .with(activity)
-                .setLayout(R.layout.text_paste)
-                .setShowPattern(ShowPattern.ALL_TIME)
-                .setLocation(100, 200)
-                .setTag(tag)
-                .show();
-
-        helperFloatTags.add(tag);
-        View view = EasyFloat.getAppFloatView(tag);
-        if (view == null) return;
-
-        TextView textView = view.findViewById(R.id.textView);
-        textView.setText(content);
-
-        // 文字贴图支持右下角拖拽缩放（与图片贴图一致，且文字始终完整显示）
-        final View textRoot = view.findViewById(R.id.textBackground);
-        ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
-        final float density = view.getResources().getDisplayMetrics().density;
-        final int minWidthPx = (int) (60 * density);
-        scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
-            @Override
-            public void onScaled(float x, float y, MotionEvent event) {
-                ViewGroup.LayoutParams lp = textRoot.getLayoutParams();
-                int newWidth = Math.max((int) (lp.width + x), minWidthPx);
-                // 测量当前宽度下文本所需高度，保证文字始终完整显示、不被裁切
-                textView.measure(
-                        View.MeasureSpec.makeMeasureSpec(newWidth, View.MeasureSpec.EXACTLY),
-                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-                int neededHeight = textView.getMeasuredHeight();
-                int newHeight = Math.max((int) (textRoot.getHeight() + y), neededHeight);
-                lp.width = newWidth;
-                lp.height = newHeight;
-                textRoot.setLayoutParams(lp);
-            }
-
-            @Override
-            public void onScaleChange(float scaleFactor, float focusX, float focusY) {
-            }
-        };
-
-        view.setOnClickListener(new DoubleClickListener() {
-            @Override
-            public void onDoubleClick(View v) {
-                EasyFloat.dismissAppFloat(tag);
-                helperFloatTags.remove(tag);
-            }
-        });
-
-        // 设置透明度跟随全局
-        view.findViewById(R.id.textBackground).setAlpha(1.0f);
+        // 将文字渲染为图片，复用图片贴图路径：缩放更流畅、无文字重排抖动、无多余空白
+        Bitmap textBitmap = TextBitmapUtil.create(activity, content);
+        showImageFloatWithTag(activity, textBitmap, tag, true);
     }
 
     // ---------- 图片浮窗 ----------
@@ -234,9 +185,14 @@ public class SharePasteHelper {
     /**
      * 创建图片浮窗
      */
-    private static void showImageFloat(@NonNull Activity activity, @NonNull Bitmap bitmap) {
-        String tag = "share_image_" + System.currentTimeMillis();
-
+    /**
+     * 以图片贴图方式展示一张 Bitmap（截图、分享图片、文字转图等共用此路径）。
+     *
+     * @param naturalSize true 时按 Bitmap 原始尺寸展示（文字转图用，避免被放大）；
+     *                    false 时按屏幕宽度 0.8 等比缩放（普通图片用）
+     */
+    private static void showImageFloatWithTag(@NonNull Activity activity, @NonNull Bitmap bitmap,
+                                              @NonNull String tag, boolean naturalSize) {
         EasyFloat
                 .with(activity)
                 .setLayout(R.layout.image_paste)
@@ -253,16 +209,21 @@ public class SharePasteHelper {
         View imageOutterShadow = view.findViewById(R.id.imageOutterShadow);
         ViewGroup.LayoutParams lp = imageOutterShadow.getLayoutParams();
 
-        // 计算合适的显示尺寸
-        DisplayMetrics dm = new DisplayMetrics();
-        activity.getWindowManager().getDefaultDisplay().getMetrics(dm);
-        int screenWidth = dm.widthPixels;
-        int imgWidth = bitmap.getWidth();
-        int imgHeight = bitmap.getHeight();
-
-        float rate = 0.8f;
-        lp.width = (int) (rate * screenWidth);
-        lp.height = (int) (lp.width * 1.0f / imgWidth * imgHeight);
+        if (naturalSize) {
+            // 文字转图：用 Bitmap 真实尺寸，1:1 显示，不放大、不留空白
+            lp.width = bitmap.getWidth();
+            lp.height = bitmap.getHeight();
+        } else {
+            // 普通图片：按屏幕宽度 0.8 等比缩放
+            DisplayMetrics dm = new DisplayMetrics();
+            activity.getWindowManager().getDefaultDisplay().getMetrics(dm);
+            int screenWidth = dm.widthPixels;
+            int imgWidth = bitmap.getWidth();
+            int imgHeight = bitmap.getHeight();
+            float rate = 0.8f;
+            lp.width = (int) (rate * screenWidth);
+            lp.height = (int) (lp.width * 1.0f / imgWidth * imgHeight);
+        }
         imageOutterShadow.setLayoutParams(lp);
 
         imageOutter.setBackground(new BitmapDrawable(activity.getResources(), bitmap));
@@ -288,6 +249,10 @@ public class SharePasteHelper {
                 helperImageTags.remove(tag);
             }
         });
+    }
+
+    private static void showImageFloat(@NonNull Activity activity, @NonNull Bitmap bitmap) {
+        showImageFloatWithTag(activity, bitmap, "share_image_" + System.currentTimeMillis(), false);
     }
 
     // ---------- 工具方法 ----------

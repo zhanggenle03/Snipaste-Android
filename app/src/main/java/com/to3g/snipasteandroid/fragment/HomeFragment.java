@@ -14,7 +14,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -41,6 +40,7 @@ import com.to3g.snipasteandroid.lib.GlideEngine;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.ImageUtil;
 import com.to3g.snipasteandroid.lib.SharePasteHelper;
+import com.to3g.snipasteandroid.lib.TextBitmapUtil;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 import com.to3g.snipasteandroid.receiver.MyReceiver;
 import com.to3g.snipasteandroid.receiver.MyReceiverHandler;
@@ -394,7 +394,16 @@ public class HomeFragment extends BaseFragment {
     }
 
     private void initImageView(Bitmap bitmap) {
-        String tagName = "bitmap";
+        ViewGroup.LayoutParams lp = new ViewGroup.LayoutParams(0, 0);
+        lp = getDefaultParams(bitmap, lp);
+        showImageFloatByBitmap("bitmap", bitmap, lp.width, lp.height);
+    }
+
+    /**
+     * 以图片贴图方式展示一张 Bitmap（截图、文字转图等共用此路径）。
+     * 文字贴图先把文字渲染成 Bitmap，再走这里，从而复用图片贴图流畅的缩放体验。
+     */
+    private void showImageFloatByBitmap(String tagName, Bitmap bitmap, int initWidth, int initHeight) {
         EasyFloat
                 .with(Objects.requireNonNull(getActivity()))
                 .setLayout(R.layout.image_paste)
@@ -409,9 +418,11 @@ public class HomeFragment extends BaseFragment {
         View imageOutterShadow = view.findViewById(R.id.imageOutterShadow);
 
         ViewGroup.LayoutParams layoutParams = imageOutterShadow.getLayoutParams();
-        imageOutterShadow.setLayoutParams(getDefaultParams(bitmap, layoutParams));
+        layoutParams.width = initWidth;
+        layoutParams.height = initHeight;
+        imageOutterShadow.setLayoutParams(layoutParams);
 
-        imageOutter.setBackground(new BitmapDrawable(bitmap));
+        imageOutter.setBackground(new BitmapDrawable(getResources(), bitmap));
 
         ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
         scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
@@ -451,65 +462,19 @@ public class HomeFragment extends BaseFragment {
     }
 
     private void showFloatText (String content) {
-        // check if the floating window has been created
-        View view = EasyFloat.getAppFloatView(content);
-        if (content == null || content.equals("")) {
+        if (content == null || content.trim().isEmpty()) {
             Toast.makeText(getContext(), getText(R.string.blankContent), Toast.LENGTH_SHORT).show();
             return;
         }
-        // if alerady created, return false
-        if (view != null) {
+        // 相同内容视为同一个贴图，避免重复创建
+        String tag = "text_" + content.hashCode();
+        if (EasyFloat.getAppFloatView(tag) != null) {
             Toast.makeText(getContext(), getText(R.string.textFloated), Toast.LENGTH_SHORT).show();
             return;
         }
-        // create new one
-        EasyFloat
-                .with(Objects.requireNonNull(getActivity()))
-                .setLayout(R.layout.text_paste)
-                .setShowPattern(ShowPattern.ALL_TIME)
-                .setLocation(100, 200)
-                .setTag(content)
-                .show();
-        floatings.add(content);
-        view = EasyFloat.getAppFloatView(content);
-        assert view != null;
-        TextView textView = view.findViewById(R.id.textView);
-        view.findViewById(R.id.textView).setOnClickListener(new DoubleClickListener() {
-            @Override
-            public void onDoubleClick(View v) {
-                EasyFloat.dismissAppFloat(content);
-                floatings.remove(content);
-            }
-        });
-        textView.setText(content);
-
-        // 文字贴图支持右下角拖拽缩放（与图片贴图一致，且文字始终完整显示）
-        final View textRoot = view.findViewById(R.id.textBackground);
-        ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
-        final float density = view.getResources().getDisplayMetrics().density;
-        final int minWidthPx = (int) (60 * density);
-        scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
-            @Override
-            public void onScaled(float x, float y, MotionEvent event) {
-                ViewGroup.LayoutParams lp = textRoot.getLayoutParams();
-                int newWidth = Math.max((int) (lp.width + x), minWidthPx);
-                // 测量当前宽度下文本所需高度，保证文字始终完整显示、不被裁切
-                textView.measure(
-                        View.MeasureSpec.makeMeasureSpec(newWidth, View.MeasureSpec.EXACTLY),
-                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-                int neededHeight = textView.getMeasuredHeight();
-                int newHeight = Math.max((int) (textRoot.getHeight() + y), neededHeight);
-                lp.width = newWidth;
-                lp.height = newHeight;
-                textRoot.setLayoutParams(lp);
-            }
-
-            @Override
-            public void onScaleChange(float scaleFactor, float focusX, float focusY) {
-            }
-        };
-
-        setFloatViewOpacity();
+        // 将文字渲染为图片，复用图片贴图路径：缩放更流畅、无文字重排抖动、无多余空白
+        Bitmap textBitmap = TextBitmapUtil.create(getContext(), content);
+        showImageFloatByBitmap(tag, textBitmap, textBitmap.getWidth(), textBitmap.getHeight());
     }
 
     private void floatText(String content) {
