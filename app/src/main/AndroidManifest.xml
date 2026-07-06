@@ -48,6 +48,11 @@
             </intent-filter>
         </activity>
 
+        <!-- 权限清单页 -->
+        <activity
+            android:name=".PermissionListActivity"
+            android:theme="@style/AppTheme" />
+
         <!-- 控制中心磁贴：长按控制中心编辑区加入，点按直接贴出剪切板文字 -->
         <service
             android:name=".ClipboardPasteTileService"

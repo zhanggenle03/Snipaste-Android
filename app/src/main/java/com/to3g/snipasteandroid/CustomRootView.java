@@ -1,40 +1,86 @@
 package com.to3g.snipasteandroid;
 
 import android.content.Context;
-import android.util.Log;
-import android.view.Gravity;
-import android.view.MotionEvent;
+import android.graphics.PorterDuff;
+import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewConfiguration;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.Toast;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import androidx.core.content.ContextCompat;
 
 import com.qmuiteam.qmui.arch.QMUIFragmentActivity;
-import com.qmuiteam.qmui.skin.QMUISkinHelper;
-import com.qmuiteam.qmui.skin.QMUISkinValueBuilder;
-import com.qmuiteam.qmui.util.QMUIDisplayHelper;
-import com.qmuiteam.qmui.util.QMUIResHelper;
-import com.qmuiteam.qmui.util.QMUIViewOffsetHelper;
-import com.qmuiteam.qmui.widget.QMUIRadiusImageView2;
 import com.qmuiteam.qmui.widget.QMUIWindowInsetLayout;
 
-class CustomRootView extends QMUIFragmentActivity.RootView {
+public class CustomRootView extends QMUIFragmentActivity.RootView {
+
+    public static final int TAB_HOME = 0;
+    public static final int TAB_SETTINGS = 1;
+
+    public interface OnTabSelectedListener {
+        void onTabSelected(int index);
+    }
 
     private QMUIWindowInsetLayout fragmentContainer;
+    private LinearLayout tabHome;
+    private LinearLayout tabSettings;
+    private ImageView tabHomeIcon;
+    private ImageView tabSettingsIcon;
+    private TextView tabHomeLabel;
+    private TextView tabSettingsLabel;
+    private OnTabSelectedListener listener;
 
     public CustomRootView(Context context, int fragmentContainerId) {
         super(context);
 
+        // RootView 是一个 FrameLayout，用一个竖直 LinearLayout 包裹
+        // 「内容容器(权重1) + 底部导航栏」两部分，使底部菜单常驻且内容不与其重叠。
+        LinearLayout root = new LinearLayout(context);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
         fragmentContainer = new QMUIWindowInsetLayout(context);
         fragmentContainer.setId(fragmentContainerId);
-        addView(fragmentContainer, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(fragmentContainer, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        View bottomNav = LayoutInflater.from(context).inflate(R.layout.bottom_nav_bar, root, false);
+        root.addView(bottomNav, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        addView(root);
+
+        tabHome = bottomNav.findViewById(R.id.tab_home);
+        tabSettings = bottomNav.findViewById(R.id.tab_settings);
+        tabHomeIcon = bottomNav.findViewById(R.id.tab_home_icon);
+        tabSettingsIcon = bottomNav.findViewById(R.id.tab_settings_icon);
+        tabHomeLabel = bottomNav.findViewById(R.id.tab_home_label);
+        tabSettingsLabel = bottomNav.findViewById(R.id.tab_settings_label);
+
+        tabHome.setOnClickListener(v -> {
+            if (listener != null) listener.onTabSelected(TAB_HOME);
+        });
+        tabSettings.setOnClickListener(v -> {
+            if (listener != null) listener.onTabSelected(TAB_SETTINGS);
+        });
+
+        setSelectedTab(TAB_HOME);
     }
 
-    @Override
-    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        super.onLayout(changed, left, top, right, bottom);
+    public void setOnTabSelectedListener(OnTabSelectedListener l) {
+        this.listener = l;
+    }
+
+    public void setSelectedTab(int index) {
+        boolean homeSelected = index == TAB_HOME;
+        int selectedColor = ContextCompat.getColor(getContext(), R.color.app_color_blue);
+        int normalColor = ContextCompat.getColor(getContext(), R.color.qmui_config_color_gray_6);
+        tabHomeIcon.setColorFilter(homeSelected ? selectedColor : normalColor, PorterDuff.Mode.SRC_IN);
+        tabHomeLabel.setTextColor(homeSelected ? selectedColor : normalColor);
+        tabSettingsIcon.setColorFilter(homeSelected ? normalColor : selectedColor, PorterDuff.Mode.SRC_IN);
+        tabSettingsLabel.setTextColor(homeSelected ? normalColor : selectedColor);
     }
 }

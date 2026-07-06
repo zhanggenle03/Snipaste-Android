@@ -45,4 +45,35 @@
     <string name="clipboardEmpty">剪贴板没有文字</string>
     <string name="transparent">透明</string>
     <string name="opaque">不透明</string>
+
+    <!-- 底部导航 -->
+    <string name="tab_home">主页</string>
+    <string name="tab_settings">设置</string>
+
+    <!-- 设置页面 -->
+    <string name="settings_title">设置</string>
+    <string name="settings_general">常规设置</string>
+    <string name="settings_gesture">手势设置</string>
+    <string name="setting_auto_start">开机自启动</string>
+    <string name="setting_show_float">显示悬浮窗</string>
+    <string name="setting_long_press_statusbar">长按状态栏快捷贴图</string>
+    <string name="setting_language">语言</string>
+    <string name="language_zh">中文（简体）</string>
+    <string name="setting_double_tap_hide">双击隐藏贴图</string>
+    <string name="setting_double_tap_opacity">双击浮窗调整不透明度</string>
+    <string name="setting_drag_edge_close">拖到屏幕边缘关闭</string>
+    <string name="setting_pinch_zoom">双指缩放贴图</string>
+    <string name="permission_list_title">权限清单</string>
+    <string name="permission_list_button">权限清单</string>
+
+    <!-- 权限清单 -->
+    <string name="perm_go_settings">前往设置</string>
+    <string name="perm_overlay_title">悬浮窗</string>
+    <string name="perm_overlay_desc">允许应用在其他应用上层显示悬浮窗</string>
+    <string name="perm_storage_title">存储空间</string>
+    <string name="perm_storage_desc">用于保存与读取贴图图片</string>
+    <string name="perm_camera_title">相机</string>
+    <string name="perm_camera_desc">用于拍摄图片并贴到屏幕</string>
+    <string name="perm_foreground_title">前台服务</string>
+    <string name="perm_foreground_desc">保持贴图在后台持续运行</string>
 </resources>
