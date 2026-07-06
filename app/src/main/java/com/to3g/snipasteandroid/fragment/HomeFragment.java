@@ -40,6 +40,7 @@ import com.to3g.snipasteandroid.lib.ClipBoardUtil;
 import com.to3g.snipasteandroid.lib.GlideEngine;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.ImageUtil;
+import com.to3g.snipasteandroid.lib.SharePasteHelper;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 import com.to3g.snipasteandroid.receiver.MyReceiver;
 import com.to3g.snipasteandroid.receiver.MyReceiverHandler;
@@ -130,6 +131,7 @@ public class HomeFragment extends BaseFragment {
     }
 
     private void setFloatViewOpacity () {
+        // 遍历 HomeFragment 自身创建的浮窗
         for (String content: floatings) {
             View view = EasyFloat.getAppFloatView(content);
             if (view != null) {
@@ -138,6 +140,19 @@ public class HomeFragment extends BaseFragment {
         }
         for (String path: floatingImages) {
             View view = EasyFloat.getAppFloatView(path);
+            if (view != null) {
+                view.findViewById(R.id.imageOutterShadow).setAlpha(opacity);
+            }
+        }
+        // 遍历 SharePasteHelper 创建的浮窗
+        for (String tag: SharePasteHelper.getHelperFloatTags()) {
+            View view = EasyFloat.getAppFloatView(tag);
+            if (view != null) {
+                view.findViewById(R.id.textBackground).setAlpha(opacity);
+            }
+        }
+        for (String tag: SharePasteHelper.getHelperImageTags()) {
+            View view = EasyFloat.getAppFloatView(tag);
             if (view != null) {
                 view.findViewById(R.id.imageOutterShadow).setAlpha(opacity);
             }
@@ -523,6 +538,19 @@ public class HomeFragment extends BaseFragment {
                 EasyFloat.dismissAppFloat(path);
             }
         }
+        // 清理 SharePasteHelper 创建的浮窗
+        for (String tag : SharePasteHelper.getHelperFloatTags()) {
+            if (EasyFloat.getAppFloatView(tag) != null) {
+                EasyFloat.dismissAppFloat(tag);
+            }
+        }
+        for (String tag : SharePasteHelper.getHelperImageTags()) {
+            if (EasyFloat.getAppFloatView(tag) != null) {
+                EasyFloat.dismissAppFloat(tag);
+            }
+        }
+        SharePasteHelper.getHelperFloatTags().clear();
+        SharePasteHelper.getHelperImageTags().clear();
     }
 
     @Override
