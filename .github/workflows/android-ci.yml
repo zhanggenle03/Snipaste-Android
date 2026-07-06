@@ -35,13 +35,15 @@ jobs:
         # AGP 加载 SDK 元数据时抛 NumberFormatException
         uses: android-actions/setup-android@v3
         with:
-          # 显式锁定 SDK 组件版本,不用 latest,避免被环境预装版本干扰
-          cmdline-tools-version: '11076708'
-          platforms: 'android-29'
-          build-tools: '29.0.3'
-          # 不接受 SDK 预览版,避免 alpha/beta 后缀污染
-          cache-disabled: false
-          cache-key: 'android-sdk-v1'
+          # 注意:cmdline-tools 9.0+ 需要 Java 17,而本项目 AGP 3.5.3 + Gradle 5.4.1
+          # 只能跑 Java 11,所以必须用 cmdline-tools 8.0(最后一个兼容 Java 11 的版本)
+          cmdline-tools-version: '8512546'
+          # 用 packages 一次性列出所需组件(sdkmanager 格式)
+          packages: |
+            platforms;android-29
+            build-tools;29.0.3
+            platform-tools
+          accept-android-sdk-licenses: true
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
