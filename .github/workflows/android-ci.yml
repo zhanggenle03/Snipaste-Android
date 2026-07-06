@@ -127,13 +127,27 @@ jobs:
 
       - name: Upload APK artifacts
         if: always()
+        # 注意:upload-artifact v4 的默认行为是 archive: true,
+        # 哪怕只有一个 APK 文件也会被包成 zip 再上传(下下来是 snipaste-android-apk.zip)
+        # 这里改为 archive: false + 直接传 APK 路径,产物就是裸 .apk
+        # 限制:archive: false 只能传单个文件,所以我们只上传 debug APK(用户最常用)
         uses: actions/upload-artifact@v4
         with:
-          # 不再压缩:GitHub Actions 的 upload-artifact v4 默认就已经不压缩了
-          # 这里保留单个 APK 文件名(而不是打包成 zip)
-          name: snipaste-android-apk
-          path: artifacts/*.apk
+          name: snipaste-debug
+          path: artifacts/snipaste-debug.apk
+          archive: false
           if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload release APK
+        # release APK 单独一个 step,确保 archive: false 单文件上传
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snipaste-release
+          path: artifacts/snipaste-release.apk
+          archive: false
+          if-no-files-found: ignore
           retention-days: 30
 
       - name: Publish Release
