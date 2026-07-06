@@ -282,13 +282,13 @@ public class HomeFragment extends BaseFragment {
 
                     @Override
                     public void touchEvent(View view, MotionEvent event) {
-                        SharePasteHelper.handleFloatTouch(path, event);
+                        SharePasteHelper.handleFloatTouch(path, view, event);
                     }
 
                     @Override
                     public void drag(View view, MotionEvent event) {
                         SharePasteHelper.repositionSlider(path);
-                        SharePasteHelper.onStickerDrag(path, view, event);
+                        SharePasteHelper.applyDragOut(path, view, event);
                     }
 
                     @Override
@@ -363,13 +363,13 @@ public class HomeFragment extends BaseFragment {
 
                     @Override
                     public void touchEvent(View view, MotionEvent event) {
-                        SharePasteHelper.handleFloatTouch(tagName, event);
+                        SharePasteHelper.handleFloatTouch(tagName, view, event);
                     }
 
                     @Override
                     public void drag(View view, MotionEvent event) {
                         SharePasteHelper.repositionSlider(tagName);
-                        SharePasteHelper.onStickerDrag(tagName, view, event);
+                        SharePasteHelper.applyDragOut(tagName, view, event);
                     }
 
                     @Override

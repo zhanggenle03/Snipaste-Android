@@ -80,8 +80,6 @@ public class SharePasteHelper {
 
     // ===================== 拖出屏幕边缘 -> 收起/关闭 =====================
 
-    /** 判断贴图是否「切实贴在屏幕边」的容差(px)：只有贴图真正贴到屏幕边、手指仍朝该边推，才算「拖出」意图 */
-    private static final int EDGE_TOL_PX = 3;
     /** 触发操作条所需的「拖出程度」：已拖出量 >= 该比例 * 贴图对应边长，或 >= 最小像素，即触发 */
     private static final float TRIGGER_RATIO = 0.5f;
     private static final int TRIGGER_MIN_DP = 48;
@@ -92,18 +90,15 @@ public class SharePasteHelper {
      *  命中后用「裁切」实现视觉拖出——把贴图内容沿吸附方向平移，被窗口裁掉，呈现滑出屏幕的效果。 */
     private static final Map<String, DragState> dragStates = new HashMap<>();
 
-    /** 单次拖拽手势的状态 */
+    /** 单次拖拽手势的状态：记录手势起点(手指+贴图窗口位置)，用于推算「贴图被系统夹在屏边后，手指继续推」产生的视觉拖出量 */
     private static class DragState {
-        boolean moved;        // 本手势是否发生过移动（区分轻点）
-        int pinX;             // 横向吸附方向：0=未吸附；-1=左；+1=右
-        int pinY;             // 纵向吸附方向：0=未吸附；-1=上；+1=下
-        float pinStartFX;     // 横向吸附起点手指 rawX
-        float pinStartFY;     // 纵向吸附起点手指 rawY
-        float overflowX;      // 横向「已拖出」累计量(px)
-        float overflowY;      // 纵向「已拖出」累计量(px)
-        int prevX, prevY;     // 上一次贴图屏幕坐标
-        float prevFX, prevFY; // 上一次手指 raw 坐标
-        boolean hasPrev;
+        boolean moved;             // 本手势是否发生过移动（区分轻点）
+        boolean inited;            // 起点基线是否已记录(ACTION_DOWN)
+        int startRawX, startRawY;  // 手势起点手指 raw 坐标
+        int startWinX, startWinY;  // 手势起点贴图窗口在屏幕上的左上角坐标
+        int winW, winH;            // 贴图窗口尺寸
+        float overflowX, overflowY; // 当前各轴向「已拖出」量(px)
+        int edgeX, edgeY;          // 横向/纵向吸附方向：0=未吸附；-1=左/上；+1=右/下
     }
     /** 已收起(最小化)的贴图 tag，便于销毁时一并清理把手 */
     private static final Set<String> collapsedTags = new HashSet<>();
@@ -129,10 +124,8 @@ public class SharePasteHelper {
     }
 
     private static Point screenSize() {
-        Activity a = QDApplication.getCurrentActivity();
-        if (a == null) return new Point(0, 0);
-        DisplayMetrics dm = new DisplayMetrics();
-        a.getWindowManager().getDefaultDisplay().getMetrics(dm);
+        // 不依赖 Activity：用系统 Resources 取屏幕尺寸，避免贴图创建后原 Activity 已 finish 导致取不到屏尺寸
+        DisplayMetrics dm = Resources.getSystem().getDisplayMetrics();
         return new Point(dm.widthPixels, dm.heightPixels);
     }
 
@@ -340,13 +333,13 @@ public class SharePasteHelper {
 
                     @Override
                     public void touchEvent(View view, MotionEvent event) {
-                        handleFloatTouch(tag, event);
+                        handleFloatTouch(tag, view, event);
                     }
 
                     @Override
                     public void drag(View view, MotionEvent event) {
                         repositionSlider(tag);
-                        onStickerDrag(tag, view, event); // 检测本手势是否推到了屏边
+                        applyDragOut(tag, view, event); // 拖到屏边后继续推 -> 裁切式视觉拖出
                     }
 
                     @Override
@@ -514,7 +507,8 @@ public class SharePasteHelper {
      * 相比「仅比较两次 ACTION_DOWN 的时间」，完成态判定能避免单次轻触（被浮窗分发成多次相邻 DOWN、
      * 或残留上次手势时间戳）误触发滑块。原「长按」交互已改为「双击」。
      */
-    public static void handleFloatTouch(@NonNull String tag, @NonNull MotionEvent event) {
+    public static void handleFloatTouch(@NonNull String tag, @NonNull View view, @NonNull MotionEvent event) {
+        applyDragOut(tag, view, event); // 拖出屏幕边缘的裁切视觉(与下方双击检测并行，互不干扰)
         int action = event.getAction();
         TapState s = tapStates.get(tag);
         if (s == null) {
@@ -651,76 +645,85 @@ public class SharePasteHelper {
     // ===================== 拖出屏幕边缘 -> 收起/关闭 =====================
 
     /**
-     * 浮窗 drag 回调中调用。系统会把浮窗（TYPE_APPLICATION_OVERLAY）夹在屏幕物理边界内，无法真正拖出，
-     * 故采用「裁切」实现视觉拖出：当贴图被拖到屏幕某条边、且手指继续朝该边推（窗口被系统夹住不再移动）时，
-     * 把贴图内容沿该方向平移，超出窗口边界的部分被窗口裁掉，呈现「滑出屏幕」的效果；拖出到一定程度即触发操作条。
+     * 在浮窗 touchEvent / drag 回调中调用。系统会把浮窗（TYPE_APPLICATION_OVERLAY）夹在屏幕物理边界内，
+     * 无法真正拖出，故用「裁切」实现视觉拖出：当贴图被拖到某条边、手指继续朝该边推（窗口被系统夹住不再移动）时，
+     * 按「手指超出窗口夹紧点的位移」把贴图内容沿该方向平移，超出窗口的部分被窗口裁掉，呈现「滑出屏幕」的效果。
+     * 拖出到一定程度，由 dragEnd 回调（onStickerDragEnd）触发操作条。
+     * <p>
+     * 关键：拖出量只由「手指 raw 坐标」与「手势起点窗口位置」推算，不依赖浮窗是否仍在移动。
+     * 因此即使浮窗被系统夹紧、drag 回调不再上报位移，只要 touchEvent 持续上报手指坐标，裁切拖出依然成立。
      */
-    public static void onStickerDrag(@NonNull String tag, @NonNull View view, @NonNull MotionEvent event) {
+    public static void applyDragOut(@NonNull String tag, @NonNull View view, @NonNull MotionEvent event) {
         DragState s = dragStates.get(tag);
         if (s == null) {
             s = new DragState();
             dragStates.put(tag, s);
         }
         switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_DOWN: {
                 s.moved = false;
-                s.pinX = 0;
-                s.pinY = 0;
-                s.overflowX = 0;
-                s.overflowY = 0;
-                s.hasPrev = false;
+                s.inited = true;
+                s.overflowX = 0; s.overflowY = 0;
+                s.edgeX = 0; s.edgeY = 0;
+                s.startRawX = (int) event.getRawX();
+                s.startRawY = (int) event.getRawY();
+                int[] loc = new int[2];
+                view.getLocationOnScreen(loc);
+                s.startWinX = loc[0];
+                s.startWinY = loc[1];
+                s.winW = view.getWidth();
+                s.winH = view.getHeight();
                 view.setTranslationX(0);
                 view.setTranslationY(0);
                 break;
+            }
             case MotionEvent.ACTION_MOVE: {
-                s.moved = true;
-                int[] loc = new int[2];
-                view.getLocationOnScreen(loc);
-                int w = view.getWidth(), h = view.getHeight();
-                float fx = event.getRawX(), fy = event.getRawY();
-                Point screen = screenSize();
-                if (s.hasPrev && screen.x > 0 && screen.y > 0) {
-                    float fdx = fx - s.prevFX, fdy = fy - s.prevFY;
-
-                    // 横向：贴图已切实贴在左/右边、且手指朝该边推 -> 开始/维持吸附
-                    if (s.pinX == 0) {
-                        if (fdx < -4 && loc[0] <= EDGE_TOL_PX) {
-                            s.pinX = -1; s.pinStartFX = fx; s.overflowX = 0;
-                        } else if (fdx > 4 && loc[0] + w >= screen.x - EDGE_TOL_PX) {
-                            s.pinX = 1; s.pinStartFX = fx; s.overflowX = 0;
-                        }
-                    }
-                    if (s.pinX != 0) {
-                        float rel = (fx - s.pinStartFX) * s.pinX; // 沿吸附方向超出量
-                        s.overflowX = Math.max(0, rel);
-                        if (s.overflowX == 0) s.pinX = 0;         // 滑回边内，解除吸附
-                    }
-
-                    // 纵向
-                    if (s.pinY == 0) {
-                        if (fdy < -4 && loc[1] <= EDGE_TOL_PX) {
-                            s.pinY = -1; s.pinStartFY = fy; s.overflowY = 0;
-                        } else if (fdy > 4 && loc[1] + h >= screen.y - EDGE_TOL_PX) {
-                            s.pinY = 1; s.pinStartFY = fy; s.overflowY = 0;
-                        }
-                    }
-                    if (s.pinY != 0) {
-                        float rel = (fy - s.pinStartFY) * s.pinY;
-                        s.overflowY = Math.max(0, rel);
-                        if (s.overflowY == 0) s.pinY = 0;
-                    }
-
-                    // 视觉裁切：把贴图内容沿吸附方向平移，超出窗口的部分被裁掉 -> 滑出屏幕
-                    view.setTranslationX(s.pinX != 0 ? s.pinX * s.overflowX : 0);
-                    view.setTranslationY(s.pinY != 0 ? s.pinY * s.overflowY : 0);
+                if (!s.inited) {
+                    // drag 回调可能比 touchEvent 的 DOWN 更早拿到事件：以当前状态作为起点基线
+                    s.inited = true;
+                    s.startRawX = (int) event.getRawX();
+                    s.startRawY = (int) event.getRawY();
+                    int[] loc = new int[2];
+                    view.getLocationOnScreen(loc);
+                    s.startWinX = loc[0];
+                    s.startWinY = loc[1];
+                    s.winW = view.getWidth();
+                    s.winH = view.getHeight();
                 }
-                s.prevX = loc[0];
-                s.prevY = loc[1];
-                s.prevFX = fx;
-                s.prevFY = fy;
-                s.hasPrev = true;
+                s.moved = true;
+                Point screen = screenSize();
+                if (screen.x <= 0 || screen.y <= 0 || s.winW <= 0 || s.winH <= 0) break;
+                float rawX = event.getRawX(), rawY = event.getRawY();
+                float desiredX = s.startWinX + (rawX - s.startRawX);
+                float desiredY = s.startWinY + (rawY - s.startRawY);
+                // 横向：窗口被系统夹在左/右边，手指继续推 -> 累计拖出量(正数)；否则无拖出
+                if (desiredX < 0) {
+                    s.edgeX = -1; s.overflowX = -desiredX;
+                } else if (desiredX > screen.x - s.winW) {
+                    s.edgeX = 1; s.overflowX = desiredX - (screen.x - s.winW);
+                } else {
+                    s.edgeX = 0; s.overflowX = 0;
+                }
+                // 纵向
+                if (desiredY < 0) {
+                    s.edgeY = -1; s.overflowY = -desiredY;
+                } else if (desiredY > screen.y - s.winH) {
+                    s.edgeY = 1; s.overflowY = desiredY - (screen.y - s.winH);
+                } else {
+                    s.edgeY = 0; s.overflowY = 0;
+                }
+                // 视觉裁切：把贴图内容沿吸附方向平移，超出窗口的部分被窗裁掉 -> 滑出屏幕
+                view.setTranslationX(s.edgeX * s.overflowX);
+                view.setTranslationY(s.edgeY * s.overflowY);
                 break;
             }
+            case MotionEvent.ACTION_CANCEL:
+                s.inited = false;
+                s.overflowX = 0; s.overflowY = 0;
+                s.edgeX = 0; s.edgeY = 0;
+                view.setTranslationX(0);
+                view.setTranslationY(0);
+                break;
         }
     }
 
@@ -733,18 +736,15 @@ public class SharePasteHelper {
         DragState s = dragStates.remove(tag);
         if (s == null || !s.moved) return;
         if (EasyFloat.getAppFloatView(tag + SHEET_SUFFIX) != null) return; // 操作条已存在
-        int w = stickerView.getWidth(), h = stickerView.getHeight();
-        float minX = Math.max(TRIGGER_RATIO * w, TRIGGER_MIN_DP * density());
-        float minY = Math.max(TRIGGER_RATIO * h, TRIGGER_MIN_DP * density());
-        boolean triggered = (s.pinX != 0 && s.overflowX >= minX)
-                || (s.pinY != 0 && s.overflowY >= minY);
+        float minX = Math.max(TRIGGER_RATIO * s.winW, TRIGGER_MIN_DP * density());
+        float minY = Math.max(TRIGGER_RATIO * s.winH, TRIGGER_MIN_DP * density());
+        boolean triggered = (s.edgeX != 0 && s.overflowX >= minX)
+                || (s.edgeY != 0 && s.overflowY >= minY);
+        // 不论是否触发，先把贴图归位到屏幕边（清除裁切），避免停在屏外
+        stickerView.setTranslationX(0);
+        stickerView.setTranslationY(0);
         if (triggered) {
-            // 贴图此时已「半拖出」（translation 保留），底部弹操作条
             showActionSheet(tag);
-        } else {
-            // 未达阈值：清除裁切，把贴图滑回屏幕内
-            stickerView.setTranslationX(0);
-            stickerView.setTranslationY(0);
         }
     }
 
