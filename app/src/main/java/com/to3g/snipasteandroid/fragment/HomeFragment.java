@@ -293,10 +293,11 @@ public class HomeFragment extends BaseFragment {
             @Override
             public void onDoubleClick(View v) {
                 EasyFloat.dismissAppFloat(path);
+                SharePasteHelper.dismissOpacitySlider(path);
                 floatingImages.remove(path);
             }
         });
-        SharePasteHelper.setupOpacitySlider(view, imageOutterShadow);
+        SharePasteHelper.attachOpacitySlider(getActivity(), path, imageOutterShadow);
     }
 
     private void initImageView(Bitmap bitmap) {
@@ -348,10 +349,11 @@ public class HomeFragment extends BaseFragment {
             @Override
             public void onDoubleClick(View v) {
                 EasyFloat.dismissAppFloat(tagName);
+                SharePasteHelper.dismissOpacitySlider(tagName);
                 floatingImages.remove(tagName);
             }
         });
-        SharePasteHelper.setupOpacitySlider(view, imageOutterShadow);
+        SharePasteHelper.attachOpacitySlider(getActivity(), tagName, imageOutterShadow);
     }
 
     @OnClick(R.id.pasteTextButton)
@@ -430,11 +432,13 @@ public class HomeFragment extends BaseFragment {
             if (EasyFloat.getAppFloatView(path) != null) {
                 EasyFloat.dismissAppFloat(path);
             }
+            SharePasteHelper.dismissOpacitySlider(path);
         }
         for (String tag : SharePasteHelper.getHelperImageTags()) {
             if (EasyFloat.getAppFloatView(tag) != null) {
                 EasyFloat.dismissAppFloat(tag);
             }
+            SharePasteHelper.dismissOpacitySlider(tag);
         }
         SharePasteHelper.getHelperImageTags().clear();
     }

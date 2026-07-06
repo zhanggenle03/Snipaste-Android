@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="28dp"
+    android:layout_height="150dp"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:background="@android:color/transparent">
+
+    <!--
+      竖向透明度滑块：原生 SeekBar 为水平，这里用 layout 尺寸 140x16 + 旋转 270°
+      渲染后视觉上成为 16 宽 × 140 高的竖条。容器尺寸 28x150 仅用于容纳旋转后的视觉区域。
+    -->
+    <SeekBar
+        android:id="@+id/opacitySeekBar"
+        android:layout_gravity="center"
+        android:layout_width="140dp"
+        android:layout_height="16dp"
+        android:rotation="270"
+        android:max="100"
+        android:progress="100" />
+
+</FrameLayout>

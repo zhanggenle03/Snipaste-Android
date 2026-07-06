@@ -241,40 +241,68 @@ public class SharePasteHelper {
                 helperImageTags.remove(tag);
             }
         });
-        setupOpacitySlider(view, imageOutterShadow);
+        attachOpacitySlider(activity, tag, imageOutterShadow);
     }
 
     /**
-     * 为单个贴图浮窗接上「长按贴图本体 → 左侧出现竖向透明度滑块，再次长按关闭」的交互。
-     * 透明度只作用于该贴图自身（imageOutterShadow），各贴图互不影响。
+     * 为单个贴图接上「长按贴图本体 → 左侧弹出独立竖向透明度滑块浮窗，再次长按关闭」的交互。
+     * 滑块是独立的 EasyFloat 浮窗（不影响贴图自身窗口的尺寸与缩放锚点），只作用于该贴图自身
+     * （imageOutterShadow），各贴图互不影响。
      */
-    public static void setupOpacitySlider(View floatView, View stickerBody) {
-        SeekBar seekBar = floatView.findViewById(R.id.opacitySeekBar);
-        seekBar.setVisibility(View.GONE);
-        seekBar.setMax(100);
-        seekBar.setProgress((int) (stickerBody.getAlpha() * 100));
-        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                stickerBody.setAlpha(progress / 100f);
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-            }
-        });
+    public static void attachOpacitySlider(@NonNull Activity activity, @NonNull String imageTag,
+                                           @NonNull View stickerBody) {
         stickerBody.setOnLongClickListener(v -> {
-            boolean willShow = seekBar.getVisibility() != View.VISIBLE;
-            seekBar.setVisibility(willShow ? View.VISIBLE : View.GONE);
-            if (willShow) {
-                seekBar.setProgress((int) (stickerBody.getAlpha() * 100));
+            String sliderTag = imageTag + "_opacity";
+            // 已显示则关闭
+            if (EasyFloat.getAppFloatView(sliderTag) != null) {
+                EasyFloat.dismissAppFloat(sliderTag);
+                return true;
             }
+            // 计算贴图本体在屏幕中的位置，把滑块放到其左侧
+            int[] loc = new int[2];
+            stickerBody.getLocationOnScreen(loc);
+            int sliderX = loc[0] - 30;
+            if (sliderX < 0) sliderX = 0;
+            int sliderY = loc[1];
+
+            EasyFloat.with(activity)
+                    .setLayout(R.layout.opacity_slider)
+                    .setShowPattern(ShowPattern.ALL_TIME)
+                    .setLocation(sliderX, sliderY)
+                    .setTag(sliderTag)
+                    .setDragEnable(false)
+                    .show();
+
+            View sliderView = EasyFloat.getAppFloatView(sliderTag);
+            if (sliderView == null) return true;
+
+            SeekBar seekBar = sliderView.findViewById(R.id.opacitySeekBar);
+            seekBar.setMax(100);
+            seekBar.setProgress((int) (stickerBody.getAlpha() * 100));
+            seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
+                    stickerBody.setAlpha(progress / 100f);
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar sb) {
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar sb) {
+                }
+            });
             return true;
         });
+    }
+
+    /** 关闭某个贴图对应的透明度滑块浮窗（贴图被关闭/清空时调用） */
+    public static void dismissOpacitySlider(@NonNull String imageTag) {
+        String sliderTag = imageTag + "_opacity";
+        if (EasyFloat.getAppFloatView(sliderTag) != null) {
+            EasyFloat.dismissAppFloat(sliderTag);
+        }
     }
 
     private static void showImageFloat(@NonNull Activity activity, @NonNull Bitmap bitmap) {
