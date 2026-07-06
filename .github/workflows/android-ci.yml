@@ -83,11 +83,16 @@ jobs:
       - name: Build with Gradle
         # 启用 --info 拿到具体失败 task 与依赖解析日志
         # 失败时只打印最后 300 行,避免刷屏(上次出现 1000+ 行 Resource missing 噪音)
+        # 同步构建 debug + release,这样 Release 产物才是真正签名后的 release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -o pipefail
-          ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
+          ./gradlew assembleDebug assembleRelease --no-daemon --stacktrace --info 2>&1 | tee build.log
           EXIT_CODE=${PIPESTATUS[0]}
-          echo "===== assembleDebug exit code: $EXIT_CODE ====="
+          echo "===== build exit code: $EXIT_CODE ====="
           if [ $EXIT_CODE -ne 0 ]; then
             echo "===== Searching for actual error in build.log ====="
             # 跳过 Resource missing 噪音,定位真正的 FAILED 任务
@@ -98,30 +103,25 @@ jobs:
           fi
 
       - name: Collect built APKs
+        # 修复旧逻辑把 debug 重命名成 release 的问题:
+        # 现在直接取 assembleDebug/assembleRelease 的原始产物,各自放到固定路径
         if: always()
         run: |
           mkdir -p artifacts
-          echo "===== Searching for APKs ====="
-          find . -name "*.apk" -type f 2>/dev/null || true
-          echo "===== Copying APKs to artifacts ====="
-          # 用 -exec cp --target-directory 替代多文件 cp {} \;,更安全
-          find . -name "*.apk" -type f -exec cp --target-directory=artifacts {} + 2>/dev/null || true
-          echo "===== artifacts directory ====="
-          ls -la artifacts/ || echo "No artifacts"
-          echo "===== build/outputs tree ====="
-          ls -la app/build/outputs/ 2>/dev/null || echo "app/build/outputs does not exist"
-          # 重命名为简洁名字:snipaste-{debug|release}.apk
-          cd artifacts
-          for apk in *.apk; do
-            if [ -f "$apk" ]; then
-              if [[ "$apk" == *"debug"* ]]; then
-                mv "$apk" "snipaste-debug.apk" 2>/dev/null
-              elif [[ "$apk" == *"release"* ]]; then
-                mv "$apk" "snipaste-release.apk" 2>/dev/null
-              fi
-            fi
-          done
-          cd ..
+          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f 2>/dev/null | head -1)
+          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" -type f 2>/dev/null | head -1)
+          if [ -n "$DEBUG_APK" ]; then
+            cp "$DEBUG_APK" artifacts/snipaste-debug.apk
+            echo "Copied debug: $DEBUG_APK"
+          else
+            echo "No debug APK found"
+          fi
+          if [ -n "$RELEASE_APK" ]; then
+            cp "$RELEASE_APK" artifacts/snipaste-release.apk
+            echo "Copied release: $RELEASE_APK"
+          else
+            echo "No release APK found"
+          fi
           echo "===== Final artifacts ====="
           ls -la artifacts/
 

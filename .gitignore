@@ -15,3 +15,7 @@
 ./app/build
 app/build
 app/release
+# WorkBuddy 本地工作目录(记忆/技能/agent 状态),不纳入版本控制
+.workbuddy/
+# Android 签名 keystore(包含私钥,不入库;CI 走 secrets 注入)
+*.keystore
