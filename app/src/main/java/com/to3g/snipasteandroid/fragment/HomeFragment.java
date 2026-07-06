@@ -277,6 +277,7 @@ public class HomeFragment extends BaseFragment {
                     public void dismiss() {
                         // 贴图浮窗被销毁时，务必带走其透明度滑块，避免残留
                         SharePasteHelper.dismissOpacitySlider(path);
+                        floatingImages.remove(path);
                     }
 
                     @Override
@@ -287,10 +288,13 @@ public class HomeFragment extends BaseFragment {
                     @Override
                     public void drag(View view, MotionEvent event) {
                         SharePasteHelper.repositionSlider(path);
+                        SharePasteHelper.onStickerDrag(path, event);
                     }
 
                     @Override
-                    public void dragEnd(View view) { }
+                    public void dragEnd(View view) {
+                        SharePasteHelper.onStickerDragEnd(path, view);
+                    }
                 })
                 .show();
         floatingImages.add(path);
@@ -318,16 +322,8 @@ public class HomeFragment extends BaseFragment {
 
             }
         };
-        // 双击弹出/收起透明度滑块的逻辑已移到浮窗 touchEvent -> SharePasteHelper.handleFloatTouch（原长按改为双击）。
-        // 这里仅给右上角 X 按钮接「关闭贴图」。
-        View closeButton = view.findViewById(R.id.closeButton);
-        if (closeButton != null) {
-            closeButton.setOnClickListener(v -> {
-                EasyFloat.dismissAppFloat(path);
-                SharePasteHelper.dismissOpacitySlider(path);
-                floatingImages.remove(path);
-            });
-        }
+        // 透明度滑块仍由浮窗 touchEvent -> SharePasteHelper.handleFloatTouch 双击触发。
+        // 关闭贴图改为：拖出屏幕边缘 -> 底部弹出「收起/关闭」选择（见 SharePasteHelper.onStickerDragEnd）。
         SharePasteHelper.attachOpacitySlider(getActivity(), path, imageOutterShadow);
     }
 
@@ -362,6 +358,7 @@ public class HomeFragment extends BaseFragment {
                     public void dismiss() {
                         // 贴图浮窗被销毁时，务必带走其透明度滑块，避免残留
                         SharePasteHelper.dismissOpacitySlider(tagName);
+                        floatingImages.remove(tagName);
                     }
 
                     @Override
@@ -372,10 +369,13 @@ public class HomeFragment extends BaseFragment {
                     @Override
                     public void drag(View view, MotionEvent event) {
                         SharePasteHelper.repositionSlider(tagName);
+                        SharePasteHelper.onStickerDrag(tagName, event);
                     }
 
                     @Override
-                    public void dragEnd(View view) { }
+                    public void dragEnd(View view) {
+                        SharePasteHelper.onStickerDragEnd(tagName, view);
+                    }
                 })
                 .show();
         floatingImages.add(tagName);
@@ -405,16 +405,8 @@ public class HomeFragment extends BaseFragment {
 
             }
         };
-        // 双击弹出/收起透明度滑块的逻辑已移到浮窗 touchEvent -> SharePasteHelper.handleFloatTouch（原长按改为双击）。
-        // 这里仅给右上角 X 按钮接「关闭贴图」。
-        View closeButton = view.findViewById(R.id.closeButton);
-        if (closeButton != null) {
-            closeButton.setOnClickListener(v -> {
-                EasyFloat.dismissAppFloat(tagName);
-                SharePasteHelper.dismissOpacitySlider(tagName);
-                floatingImages.remove(tagName);
-            });
-        }
+        // 透明度滑块仍由浮窗 touchEvent -> SharePasteHelper.handleFloatTouch 双击触发。
+        // 关闭贴图改为：拖出屏幕边缘 -> 底部弹出「收起/关闭」选择（见 SharePasteHelper.onStickerDragEnd）。
         SharePasteHelper.attachOpacitySlider(getActivity(), tagName, imageOutterShadow);
     }
 
@@ -490,17 +482,12 @@ public class HomeFragment extends BaseFragment {
      * 清空所有浮窗（本 Fragment 与 SharePasteHelper 创建的）
      */
     private void clearAllFloatViews () {
-        for (String path: floatingImages) {
-            if (EasyFloat.getAppFloatView(path) != null) {
-                EasyFloat.dismissAppFloat(path);
-            }
-            SharePasteHelper.dismissOpacitySlider(path);
+        for (String path : floatingImages) {
+            SharePasteHelper.closeSticker(path);
         }
-        for (String tag : SharePasteHelper.getHelperImageTags()) {
-            if (EasyFloat.getAppFloatView(tag) != null) {
-                EasyFloat.dismissAppFloat(tag);
-            }
-            SharePasteHelper.dismissOpacitySlider(tag);
+        floatingImages.clear();
+        for (String tag : new ArrayList<>(SharePasteHelper.getHelperImageTags())) {
+            SharePasteHelper.closeSticker(tag);
         }
         SharePasteHelper.getHelperImageTags().clear();
     }
