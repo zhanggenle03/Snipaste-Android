@@ -33,7 +33,7 @@
     <string name="setting">设置</string>
     <string name="help">帮助</string>
     <string name="opacity">不透明度</string>
-    <string name="helpText">双击浮窗可以关闭</string>
+    <string name="helpText">双击浮窗可调整不透明度；把贴图拖出屏幕边缘，底部会弹出「收起 / 关闭 / 取消」。</string>
     <string name="test_activity">测试activity</string>
     <string name="blankContent">内容为空</string>
     <string name="textFloated">已悬浮</string>

@@ -758,6 +758,7 @@ public class SharePasteHelper {
                 .setLayout(R.layout.sticker_action_sheet)
                 .setShowPattern(ShowPattern.ALL_TIME)
                 .setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, (int) (24 * density()))
+                .setAppFloatAnimator(new BottomSheetAnimator()) // 从屏幕正下方滑入/滑出，而非默认横向滑入
                 .setTag(sheetTag)
                 .setDragEnable(false)
                 .show();

@@ -12,7 +12,7 @@
     <string name="default_text">default text</string>
     <string name="floatingPermissionText">To use the floating window function, you need to grant the floating window permission.</string>
     <string name="help">help</string>
-    <string name="helpText">Double-click the floating window to close</string>
+    <string name="helpText">Double-click the floating window to adjust opacity; drag it off the screen edge and a "Collapse / Close / Cancel" sheet slides up from the bottom.</string>
     <string name="needFloatingPermission">floating window permission needed</string>
     <string name="opacity">opacity</string>
     <string name="pasteSectionTitle1">float text</string>
