@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="64dp"
-    android:layout_height="40dp"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="48dp"
+    android:layout_height="64dp"
     android:background="@drawable/bg_handle_pill"
-    android:gravity="center">
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="贴图"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp" />
-</LinearLayout>
+    android:padding="3dp">
+
+    <ImageView
+        android:id="@+id/handleThumb"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="恢复贴图" />
+</FrameLayout>

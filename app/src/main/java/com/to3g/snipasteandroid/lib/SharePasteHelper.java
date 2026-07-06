@@ -12,12 +12,14 @@ import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
+import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.Toast;
 
@@ -77,8 +79,9 @@ public class SharePasteHelper {
 
     // ===================== 拖出屏幕边缘 -> 收起/关闭 =====================
 
-    /** 拖出屏幕边缘判定的贴边容差(dp)：贴图边缘已贴到屏幕边(库默认会把浮窗夹在屏内)即视为“拖出” */
-    private static final int EDGE_MARGIN_DP = 12;
+    /** 拖出屏幕边缘判定的贴边容差(dp)：贴图边缘贴到屏幕边(容差内)即视为“拖到边缘”。
+     *  取较小值，要求用户确实把贴图拖到边而非轻轻碰到就弹 */
+    private static final int EDGE_MARGIN_DP = 6;
     /** 收起把手 / 操作条 浮窗 tag 后缀 */
     private static final String HANDLE_SUFFIX = "_handle";
     private static final String SHEET_SUFFIX = "_sheet";
@@ -86,6 +89,18 @@ public class SharePasteHelper {
     private static final Map<String, Boolean> dragMoved = new HashMap<>();
     /** 已收起(最小化)的贴图 tag，便于销毁时一并清理把手 */
     private static final Set<String> collapsedTags = new HashSet<>();
+
+    // 边枚举（用于判断贴图被拖向哪条边、把手应停靠在哪条边）
+    private static final int EDGE_LEFT = 0;
+    private static final int EDGE_RIGHT = 1;
+    private static final int EDGE_TOP = 2;
+    private static final int EDGE_BOTTOM = 3;
+    /** 拖出屏幕后保留在屏幕内的“条带”宽度(dp)：EasyFloat 默认把浮窗夹在屏内，
+     *  故用 moveFloatWindow 直接改 WindowManager 坐标把贴图推到屏外，只留这条带可见 */
+    private static final int DOCK_KEEP_DP = 64;
+    /** 收起把手(缩略条)尺寸(dp) */
+    private static final int HANDLE_W_DP = 48;
+    private static final int HANDLE_H_DP = 64;
 
     private static float density() {
         return Resources.getSystem().getDisplayMetrics().density;
@@ -125,6 +140,47 @@ public class SharePasteHelper {
         return trulyOut || nearEdge;
     }
 
+    /** 判断贴图贴向哪条边：取中心点离屏幕四边最近的那条 */
+    private static int edgeOf(@NonNull Rect r, @NonNull Point screen) {
+        int cx = r.centerX(), cy = r.centerY();
+        int dL = cx, dR = screen.x - cx, dT = cy, dB = screen.y - cy;
+        int min = Math.min(Math.min(dL, dR), Math.min(dT, dB));
+        if (min == dL) return EDGE_LEFT;
+        if (min == dR) return EDGE_RIGHT;
+        if (min == dT) return EDGE_TOP;
+        return EDGE_BOTTOM;
+    }
+
+    /**
+     * 计算贴图吸附到某条边后的窗口坐标。
+     * @param keepPx 保留在屏幕内的像素宽度（0=贴边完整可见；>0=拖出屏外、只留 keepPx 的条带可见）
+     */
+    private static int[] dockPosition(@NonNull Rect r, @NonNull Point screen, int keepPx) {
+        int w = r.width(), h = r.height();
+        int edge = edgeOf(r, screen);
+        int x = r.left, y = r.top;
+        if (edge == EDGE_LEFT)        x = -(w - keepPx);
+        else if (edge == EDGE_RIGHT)  x = screen.x - keepPx;
+        else if (edge == EDGE_TOP)    y = -(h - keepPx);
+        else                          y = screen.y - keepPx;
+        return new int[]{ x, y };
+    }
+
+    /** 从贴图本体背景生成一张缩略图（用于收起后的缩略条把手） */
+    private static Bitmap makeThumbnail(@NonNull String tag) {
+        View sv = EasyFloat.getAppFloatView(tag);
+        if (sv == null) return null;
+        View imageOutter = sv.findViewById(R.id.imageOutter);
+        if (imageOutter == null) return null;
+        Drawable d = imageOutter.getBackground();
+        Bitmap src = (d instanceof BitmapDrawable) ? ((BitmapDrawable) d).getBitmap() : null;
+        if (src == null || src.isRecycled()) return null;
+        int th = (int) (HANDLE_H_DP * density());
+        float ar = (float) src.getWidth() / src.getHeight();
+        int tw = Math.max(1, Math.round(th * ar));
+        tw = Math.min(tw, (int) (HANDLE_W_DP * 2 * density())); // 限制最大宽度，避免极宽图
+        return Bitmap.createScaledBitmap(src, tw, th, true);
+    }
 
 
     // ---------- 对外接口 ----------
@@ -609,7 +665,7 @@ public class SharePasteHelper {
         if (event.getAction() == MotionEvent.ACTION_MOVE) dragMoved.put(tag, true);
     }
 
-    /** 浮窗 dragEnd 回调中调用：若本次拖拽把贴图拖出屏幕边缘，则底部弹出操作条 */
+    /** 浮窗 dragEnd 回调中调用：若本次拖拽把贴图拖到屏幕边缘，则把贴图吸附到该边(拖出屏外留条带)并底部弹出操作条 */
     public static void onStickerDragEnd(@NonNull String tag, @NonNull View stickerView) {
         // 仅当本次手势确实发生过拖拽才判定（轻点不触发，避免误弹）
         if (!Boolean.TRUE.equals(dragMoved.get(tag))) {
@@ -621,17 +677,23 @@ public class SharePasteHelper {
         Rect r = stickerRect(stickerView);
         Point screen = screenSize();
         if (r == null || screen.x <= 0) return;
-        if (isOut(r, screen)) showActionSheet(tag, r, screen);
+        if (!isOut(r, screen)) return;
+        // 把贴图吸附到拖出的那条边：用 moveFloatWindow 直接改窗口坐标，把贴图推到屏外、只留条带可见
+        int[] dock = dockPosition(r, screen, (int) (DOCK_KEEP_DP * density()));
+        moveFloatWindow(stickerView, dock[0], dock[1]);
+        showActionSheet(tag);
     }
 
-    private static void showActionSheet(@NonNull String tag, @NonNull Rect r, @NonNull Point screen) {
+    /** 底部居中弹出操作条（收起 / 关闭 / 取消） */
+    private static void showActionSheet(@NonNull String tag) {
         Activity activity = currentActivity(tag);
         if (activity == null) return;
         String sheetTag = tag + SHEET_SUFFIX;
+        if (EasyFloat.getAppFloatView(sheetTag) != null) return;
         EasyFloat.with(activity)
                 .setLayout(R.layout.sticker_action_sheet)
                 .setShowPattern(ShowPattern.ALL_TIME)
-                .setLocation(screen.x / 2, screen.y - 400) // 估算初值，稍后精确定位到底部居中
+                .setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, (int) (24 * density()))
                 .setTag(sheetTag)
                 .setDragEnable(false)
                 .show();
@@ -642,7 +704,7 @@ public class SharePasteHelper {
         View btnCancel = sheet.findViewById(R.id.btnCancel);
         if (btnCollapse != null) btnCollapse.setOnClickListener(v -> {
             dismissActionSheet(tag);
-            collapseSticker(tag, r, screen);
+            collapseSticker(tag); // 收起：隐藏贴图，在条边显示缩略条
         });
         if (btnClose != null) btnClose.setOnClickListener(v -> {
             dismissActionSheet(tag);
@@ -650,22 +712,13 @@ public class SharePasteHelper {
         });
         if (btnCancel != null) btnCancel.setOnClickListener(v -> {
             dismissActionSheet(tag);
-            // 取消：若贴图已离屏则收起以防丢失，否则保留原位
+            // 取消：把贴图还原到屏幕内（贴边但完整可见），避免停在屏外丢失
             View sv = EasyFloat.getAppFloatView(tag);
             if (sv != null) {
                 Rect rr = stickerRect(sv);
-                if (rr != null && isOut(rr, screenSize())) collapseSticker(tag, rr, screenSize());
-            }
-        });
-        // 底部居中精确定位
-        sheet.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-            @Override
-            public void onGlobalLayout() {
-                if (sheet.getWidth() > 0 && sheet.getHeight() > 0) {
-                    int x = (screen.x - sheet.getWidth()) / 2;
-                    int y = screen.y - sheet.getHeight() - (int) (24 * density());
-                    moveFloatWindow(sheet, x, y);
-                    sheet.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                if (rr != null) {
+                    int[] p = dockPosition(rr, screenSize(), 0);
+                    moveFloatWindow(sv, p[0], p[1]);
                 }
             }
         });
@@ -683,10 +736,10 @@ public class SharePasteHelper {
         Point screen = screenSize();
         View sv = EasyFloat.getAppFloatView(tag);
         Rect r = sv != null ? stickerRect(sv) : null;
-        collapseSticker(tag, r, screen);
+        collapseSticker(tag, r, screen, makeThumbnail(tag));
     }
 
-    private static void collapseSticker(@NonNull String tag, Rect r, @NonNull Point screen) {
+    private static void collapseSticker(@NonNull String tag, Rect r, @NonNull Point screen, Bitmap thumb) {
         dismissActionSheet(tag);
         hideOpacitySlider(tag); // 收起时一并收起透明度滑块
         try {
@@ -695,17 +748,18 @@ public class SharePasteHelper {
             Log.e(TAG, "hideAppFloat failed: " + e.getMessage());
         }
         collapsedTags.add(tag);
-        showHandle(tag, r, screen);
+        showHandle(tag, r, screen, thumb);
     }
 
-    private static void showHandle(@NonNull String tag, Rect r, @NonNull Point screen) {
+    /** 在拖出边显示一个缩略条把手（点击恢复）。thumb 为贴图缩略图，可为 null(退化成纯色条) */
+    private static void showHandle(@NonNull String tag, Rect r, @NonNull Point screen, Bitmap thumb) {
         Activity activity = currentActivity(tag);
         if (activity == null) return;
         String handleTag = tag + HANDLE_SUFFIX;
         if (EasyFloat.getAppFloatView(handleTag) != null) return;
         // 无位置信息时(理论上不会)兜底放左下角
         int[] pos = (r != null) ? handlePosition(r, screen)
-                : new int[]{ (int) (8 * density()), (int) (screen.y - 48 * density()) };
+                : new int[]{ (int) (8 * density()), (int) (screen.y - HANDLE_H_DP * density()) };
         EasyFloat.with(activity)
                 .setLayout(R.layout.image_paste_handle)
                 .setShowPattern(ShowPattern.ALL_TIME)
@@ -715,27 +769,28 @@ public class SharePasteHelper {
                 .show();
         View handle = EasyFloat.getAppFloatView(handleTag);
         if (handle == null) return;
+        ImageView iv = handle.findViewById(R.id.handleThumb);
+        if (iv != null && thumb != null) iv.setImageBitmap(thumb);
         handle.setOnClickListener(v -> restoreSticker(tag));
     }
 
     /** 根据贴图贴出的那条边，算出把手应放置的位置(贴边、居中于该边) */
     private static int[] handlePosition(@NonNull Rect r, @NonNull Point screen) {
+        int edge = edgeOf(r, screen);
+        int hw = (int) (HANDLE_W_DP * density()), hh = (int) (HANDLE_H_DP * density());
         int cx = r.centerX(), cy = r.centerY();
-        int hw = (int) (64 * density()), hh = (int) (40 * density()); // 与 image_paste_handle 尺寸一致
-        int dL = cx, dR = screen.x - cx, dT = cy, dB = screen.y - cy;
-        int min = Math.min(Math.min(dL, dR), Math.min(dT, dB));
-        int m = (int) (8 * density());
+        int m = (int) (4 * density());
         int x, y;
-        if (min == dL) { x = m; y = cy - hh / 2; }
-        else if (min == dR) { x = screen.x - hw - m; y = cy - hh / 2; }
-        else if (min == dT) { x = cx - hw / 2; y = m; }
-        else { x = cx - hw / 2; y = screen.y - hh - m; }
+        if (edge == EDGE_LEFT)       { x = m;              y = cy - hh / 2; }
+        else if (edge == EDGE_RIGHT) { x = screen.x - hw - m; y = cy - hh / 2; }
+        else if (edge == EDGE_TOP)   { x = cx - hw / 2;    y = m; }
+        else                         { x = cx - hw / 2;    y = screen.y - hh - m; }
         x = Math.max(m, Math.min(x, screen.x - hw - m));
         y = Math.max(m, Math.min(y, screen.y - hh - m));
         return new int[]{ x, y };
     }
 
-    /** 点击收起把手 -> 恢复贴图 */
+    /** 点击收起把手 -> 恢复贴图（归位到屏幕内，贴边但完整可见） */
     public static void restoreSticker(@NonNull String tag) {
         try {
             EasyFloat.dismissAppFloat(tag + HANDLE_SUFFIX);
@@ -747,6 +802,15 @@ public class SharePasteHelper {
             EasyFloat.showAppFloat(tag);
         } catch (Exception e) {
             Log.e(TAG, "showAppFloat failed: " + e.getMessage());
+        }
+        // 恢复后把贴图从“屏外吸附位”移回屏幕内（贴边但完整可见）
+        View sv = EasyFloat.getAppFloatView(tag);
+        if (sv != null) {
+            Rect rr = stickerRect(sv);
+            if (rr != null) {
+                int[] p = dockPosition(rr, screenSize(), 0);
+                moveFloatWindow(sv, p[0], p[1]);
+            }
         }
     }
 
