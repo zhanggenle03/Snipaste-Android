@@ -104,16 +104,35 @@ jobs:
           echo "===== Searching for APKs ====="
           find . -name "*.apk" -type f 2>/dev/null || true
           echo "===== Copying APKs to artifacts ====="
-          find . -name "*.apk" -type f -exec cp {} artifacts/ \; || true
+          # 用 -exec cp --target-directory 替代多文件 cp {} \;,更安全
+          find . -name "*.apk" -type f -exec cp --target-directory=artifacts {} + 2>/dev/null || true
           echo "===== artifacts directory ====="
           ls -la artifacts/ || echo "No artifacts"
           echo "===== build/outputs tree ====="
           ls -la app/build/outputs/ 2>/dev/null || echo "app/build/outputs does not exist"
+          # 给 APK 起个固定文件名(去掉 build 目录层级,产物名更稳定)
+          cd artifacts
+          for apk in *.apk; do
+            if [ -f "$apk" ]; then
+              # 提取原始信息(从相对路径拼出简单名字)
+              base=$(basename "$apk" .apk)
+              if [[ "$apk" == *"debug"* ]]; then
+                mv "$apk" "snipaste-${GITHUB_SHA::7}-debug.apk" 2>/dev/null || mv "$apk" "snipaste-debug.apk"
+              elif [[ "$apk" == *"release"* ]]; then
+                mv "$apk" "snipaste-${GITHUB_SHA::7}-release.apk" 2>/dev/null || mv "$apk" "snipaste-release.apk"
+              fi
+            fi
+          done
+          cd ..
+          echo "===== Final artifacts ====="
+          ls -la artifacts/
 
       - name: Upload APK artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          # 不再压缩:GitHub Actions 的 upload-artifact v4 默认就已经不压缩了
+          # 这里保留单个 APK 文件名(而不是打包成 zip)
           name: snipaste-android-apk
           path: artifacts/*.apk
           if-no-files-found: warn
@@ -124,6 +143,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          # 直接上传 .apk 文件,不再压缩为 zip
           files: |
             artifacts/*.apk
           generate_release_notes: true
