@@ -43,15 +43,20 @@ jobs:
 
       - name: Install required SDK packages
         # setup-android@v3 不再提供 platforms/build-tools 直接参数,改用 sdkmanager 显式安装
-        # 用最低版本 Java 11 兼容的包路径
+        # 关键:Runner 预装的 cmdline-tools 12.0 需 Java 17(61.0),而本项目只能用 Java 11(55.0)
+        # 所以必须强制指到 cmdline-tools/7.0/sdkmanager(class 55.0,Java 11 兼容)
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
           ls -la "$ANDROID_HOME/cmdline-tools/"
-          # 找到 sdkmanager(cmdline-tools 8.0 布局是 cmdline-tools/8.0/bin/sdkmanager)
-          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)
-          echo "SDKMANAGER=$SDKMANAGER"
+          # 优先用 7.0 路径下的 sdkmanager(Java 11 兼容),避免 latest(12.0,需 Java 17)
+          if [ -x "$ANDROID_HOME/cmdline-tools/7.0/bin/sdkmanager" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/7.0/bin/sdkmanager"
+          else
+            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)
+          fi
+          echo "Using SDKMANAGER=$SDKMANAGER"
           # 安装 platform-29 / build-tools 29.0.3 / platform-tools
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
           "$SDKMANAGER" --install "platforms;android-29" "build-tools;29.0.3" "platform-tools"
