@@ -86,8 +86,18 @@ public class SharePasteHelper {
     /** 收起把手 / 操作条 浮窗 tag 后缀 */
     private static final String HANDLE_SUFFIX = "_handle";
     private static final String SHEET_SUFFIX = "_sheet";
-    /** 本手势是否发生过拖拽（区分“轻点”与“拖出”，避免轻点贴边贴图误弹操作条） */
-    private static final Map<String, Boolean> dragMoved = new HashMap<>();
+    /** 拖拽手势状态：用于检测「用户把贴图推到屏幕边缘、推不动了」的意图（系统会把浮窗夹在屏内，无法真正拖出） */
+    private static final Map<String, DragState> dragStates = new HashMap<>();
+
+    /** 单次拖拽手势的状态 */
+    private static class DragState {
+        boolean moved;        // 本手势是否发生过移动（区分轻点）
+        boolean edgePinned;   // 贴图是否被系统夹在屏边、推不动了（即用户的「拖出」意图）
+        int pinnedEdge;       // 被推住的那条边
+        int prevX, prevY;     // 上一次贴图屏幕坐标
+        float prevFX, prevFY; // 上一次手指 raw 坐标
+        boolean hasPrev;
+    }
     /** 已收起(最小化)的贴图 tag，便于销毁时一并清理把手 */
     private static final Set<String> collapsedTags = new HashSet<>();
 
@@ -357,7 +367,7 @@ public class SharePasteHelper {
                     @Override
                     public void drag(View view, MotionEvent event) {
                         repositionSlider(tag);
-                        onStickerDrag(tag, event); // 标记本手势发生过拖拽
+                        onStickerDrag(tag, view, event); // 检测本手势是否推到了屏边
                     }
 
                     @Override
@@ -661,25 +671,64 @@ public class SharePasteHelper {
 
     // ===================== 拖出屏幕边缘 -> 收起/关闭 =====================
 
-    /** 浮窗 drag 回调中调用：仅当发生 MOVE 才标记本手势“拖过”，用于区分轻点与拖出 */
-    public static void onStickerDrag(@NonNull String tag, @NonNull MotionEvent event) {
-        if (event.getAction() == MotionEvent.ACTION_MOVE) dragMoved.put(tag, true);
+    /**
+     * 浮窗 drag 回调中调用。系统会把浮窗夹在屏幕内、无法真正拖出，因此这里不靠像素边距判定，
+     * 而是检测「贴图被推到屏边、推不动了」：当贴图坐标几乎不再变化、而手指仍在朝某边移动时，
+     * 说明贴图已被系统夹在屏边——这就是用户的「拖出」意图，松手即触发操作条。
+     */
+    public static void onStickerDrag(@NonNull String tag, @NonNull View view, @NonNull MotionEvent event) {
+        DragState s = dragStates.get(tag);
+        if (s == null) {
+            s = new DragState();
+            dragStates.put(tag, s);
+        }
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                s.moved = false;
+                s.edgePinned = false;
+                s.hasPrev = false;
+                break;
+            case MotionEvent.ACTION_MOVE: {
+                s.moved = true;
+                int[] loc = new int[2];
+                view.getLocationOnScreen(loc);
+                float fx = event.getRawX(), fy = event.getRawY();
+                if (s.hasPrev) {
+                    int sdx = loc[0] - s.prevX, sdy = loc[1] - s.prevY;
+                    float fdx = fx - s.prevFX, fdy = fy - s.prevFY;
+                    // 贴图几乎不动、手指却大幅移动 -> 贴图被夹在屏边推不动了（系统限制，无法真正拖出）
+                    if (Math.abs(fdx) > 4f && Math.abs(sdx) < Math.abs(fdx) * 0.3f) {
+                        s.edgePinned = true;
+                        s.pinnedEdge = (fdx < 0) ? EDGE_LEFT : EDGE_RIGHT;
+                    }
+                    if (Math.abs(fdy) > 4f && Math.abs(sdy) < Math.abs(fdy) * 0.3f) {
+                        s.edgePinned = true;
+                        s.pinnedEdge = (fdy < 0) ? EDGE_TOP : EDGE_BOTTOM;
+                    }
+                }
+                s.prevX = loc[0];
+                s.prevY = loc[1];
+                s.prevFX = fx;
+                s.prevFY = fy;
+                s.hasPrev = true;
+                break;
+            }
+        }
     }
 
-    /** 浮窗 dragEnd 回调中调用：若本次拖拽把贴图拖到屏幕边缘，则把贴图吸附到该边(拖出屏外留条带)并底部弹出操作条 */
+    /** 浮窗 dragEnd 回调中调用：若本次拖拽把贴图推到了屏幕边缘（系统限制下无法真正拖出），
+     *  则把贴图吸附到该边（用 moveFloatWindow 推到屏外、只留条带，实现「视觉上移除」），并底部弹出操作条 */
     public static void onStickerDragEnd(@NonNull String tag, @NonNull View stickerView) {
-        // 仅当本次手势确实发生过拖拽才判定（轻点不触发，避免误弹）
-        if (!Boolean.TRUE.equals(dragMoved.get(tag))) {
-            dragMoved.remove(tag);
-            return;
-        }
-        dragMoved.remove(tag);
+        DragState s = dragStates.remove(tag);
+        // 仅当本次手势确实发生过拖拽、且把贴图推到了屏边（或像素层面已在边缘）才判定；
+        // 轻点 / 屏幕内普通拖动均不触发，避免误弹
+        if (s == null || !s.moved) return;
         if (EasyFloat.getAppFloatView(tag + SHEET_SUFFIX) != null) return; // 操作条已存在
         Rect r = stickerRect(stickerView);
         Point screen = screenSize();
         if (r == null || screen.x <= 0) return;
-        if (!isOut(r, screen)) return;
-        // 把贴图吸附到拖出的那条边：用 moveFloatWindow 直接改窗口坐标，把贴图推到屏外、只留条带可见
+        if (!s.edgePinned && !isOut(r, screen)) return;
+        // 视觉移除：把贴图推到屏外、只留条带可见（系统限制下无法真正拖出，用「视觉移除」替代）
         int[] dock = dockPosition(r, screen, (int) (DOCK_KEEP_DP * density()));
         moveFloatWindow(stickerView, dock[0], dock[1]);
         showActionSheet(tag);

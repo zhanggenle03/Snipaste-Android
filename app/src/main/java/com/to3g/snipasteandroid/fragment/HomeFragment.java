@@ -288,7 +288,7 @@ public class HomeFragment extends BaseFragment {
                     @Override
                     public void drag(View view, MotionEvent event) {
                         SharePasteHelper.repositionSlider(path);
-                        SharePasteHelper.onStickerDrag(path, event);
+                        SharePasteHelper.onStickerDrag(path, view, event);
                     }
 
                     @Override
@@ -369,7 +369,7 @@ public class HomeFragment extends BaseFragment {
                     @Override
                     public void drag(View view, MotionEvent event) {
                         SharePasteHelper.repositionSlider(tagName);
-                        SharePasteHelper.onStickerDrag(tagName, event);
+                        SharePasteHelper.onStickerDrag(tagName, view, event);
                     }
 
                     @Override
