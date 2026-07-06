@@ -140,13 +140,11 @@ jobs:
 
       - name: Upload APK artifacts
         if: always()
-        # upload-artifact v4 + archive: false 仍然在某些 Runner 上不生效(用户反馈仍是 zip)
-        # 改用通用方案:把 APK 重命名到一个固定路径,然后用 gh release-style 走 Releases
-        # 但更稳妥的方案是:直接用 Release action 上传(不打包)
-        # 这里使用 upload-artifact 的 archive: false,这是官方推荐做法
-        uses: actions/upload-artifact@v4
+        # 升级到 v7:从 v7 起 archive: false 才真正生效,下载即为原始 .apk 而非 .zip
+        # (v4 的 archive: false 无效,工件仍会被打包成 zip)
+        # 注意:archive: false 时只能上传单个文件,工件名直接取文件名(name 被忽略)
+        uses: actions/upload-artifact@v7
         with:
-          name: snipaste-debug
           path: artifacts/snipaste-debug.apk
           archive: false
           if-no-files-found: warn
@@ -154,9 +152,9 @@ jobs:
 
       - name: Upload release APK
         if: always()
-        uses: actions/upload-artifact@v4
+        # v7 + archive: false:下载为原始 .apk(name 被忽略,工件名取文件名)
+        uses: actions/upload-artifact@v7
         with:
-          name: snipaste-release
           path: artifacts/snipaste-release.apk
           archive: false
           if-no-files-found: ignore
