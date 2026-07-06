@@ -154,6 +154,26 @@ public class SharePasteHelper {
         TextView textView = view.findViewById(R.id.textView);
         textView.setText(content);
 
+        // 文字贴图支持右下角拖拽缩放（与图片贴图一致）
+        final View textRoot = view.findViewById(R.id.shadowLayout);
+        ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
+        final float density = view.getResources().getDisplayMetrics().density;
+        final int minWidthPx = (int) (60 * density);
+        final int minHeightPx = (int) (40 * density);
+        scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
+            @Override
+            public void onScaled(float x, float y, MotionEvent event) {
+                ViewGroup.LayoutParams lp = textRoot.getLayoutParams();
+                lp.width = Math.max((int) (lp.width + x), minWidthPx);
+                lp.height = Math.max((int) (lp.height + y), minHeightPx);
+                textRoot.setLayoutParams(lp);
+            }
+
+            @Override
+            public void onScaleChange(float scaleFactor, float focusX, float focusY) {
+            }
+        };
+
         view.setOnClickListener(new DoubleClickListener() {
             @Override
             public void onDoubleClick(View v) {
