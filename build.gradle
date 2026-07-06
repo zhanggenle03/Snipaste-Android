@@ -11,8 +11,9 @@ buildscript {
         maven { url 'https://maven.aliyun.com/repository/google' }
         // jcenter 镜像(替代已下线的 jcenter())
         maven { url 'https://maven.aliyun.com/repository/jcenter' }
-        // JitPack 提供 com.github.* 依赖
+        // JitPack 提供 com.github.* 依赖;先官方 jitpack.io,后阿里云 jitpack 镜像兜底
         maven { url 'https://jitpack.io' }
+        maven { url 'https://maven.aliyun.com/repository/jitpack' }
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:3.5.3'
@@ -28,6 +29,7 @@ allprojects {
         maven { url 'https://maven.aliyun.com/repository/google' }
         maven { url 'https://maven.aliyun.com/repository/jcenter' }
         maven { url 'https://jitpack.io' }
+        maven { url 'https://maven.aliyun.com/repository/jitpack' }
     }
 
     ext {
