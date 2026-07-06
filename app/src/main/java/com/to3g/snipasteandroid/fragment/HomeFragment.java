@@ -24,6 +24,7 @@ import com.luck.picture.lib.config.PictureMimeType;
 import com.luck.picture.lib.entity.LocalMedia;
 import com.lzf.easyfloat.EasyFloat;
 import com.lzf.easyfloat.enums.ShowPattern;
+import com.lzf.easyfloat.interfaces.OnFloatCallbacks;
 import com.lzf.easyfloat.permission.PermissionUtils;
 import com.qmuiteam.qmui.arch.annotation.LatestVisitRecord;
 import com.qmuiteam.qmui.widget.QMUITopBarLayout;
@@ -263,6 +264,30 @@ public class HomeFragment extends BaseFragment {
                 .setShowPattern(ShowPattern.ALL_TIME)
                 .setLocation(100, 200)
                 .setTag(path)
+                .registerCallbacks(new OnFloatCallbacks() {
+                    @Override
+                    public void createdResult(boolean isCreated, String msg, View view) { }
+
+                    @Override
+                    public void show(View view) { }
+
+                    @Override
+                    public void hide(View view) { }
+
+                    @Override
+                    public void dismiss() { }
+
+                    @Override
+                    public void touchEvent(View view, MotionEvent event) { }
+
+                    @Override
+                    public void drag(View view, MotionEvent event) {
+                        SharePasteHelper.repositionSlider(path);
+                    }
+
+                    @Override
+                    public void dragEnd(View view) { }
+                })
                 .show();
         floatingImages.add(path);
         View view = EasyFloat.getAppFloatView(path);
@@ -317,6 +342,30 @@ public class HomeFragment extends BaseFragment {
                 .setShowPattern(ShowPattern.ALL_TIME)
                 .setLocation(100, 200)
                 .setTag(tagName)
+                .registerCallbacks(new OnFloatCallbacks() {
+                    @Override
+                    public void createdResult(boolean isCreated, String msg, View view) { }
+
+                    @Override
+                    public void show(View view) { }
+
+                    @Override
+                    public void hide(View view) { }
+
+                    @Override
+                    public void dismiss() { }
+
+                    @Override
+                    public void touchEvent(View view, MotionEvent event) { }
+
+                    @Override
+                    public void drag(View view, MotionEvent event) {
+                        SharePasteHelper.repositionSlider(tagName);
+                    }
+
+                    @Override
+                    public void dragEnd(View view) { }
+                })
                 .show();
         floatingImages.add(tagName);
         View view = EasyFloat.getAppFloatView(tagName);

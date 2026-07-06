@@ -12,6 +12,8 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.view.WindowManager;
 import android.widget.SeekBar;
 import android.widget.Toast;
 
@@ -28,7 +30,9 @@ import com.to3g.snipasteandroid.view.ScaleImage;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 共享接收与贴图助手
@@ -38,6 +42,11 @@ import java.util.List;
 public class SharePasteHelper {
 
     private static final String TAG = "SharePasteHelper";
+
+    /** 贴图 tag -> 贴图本体 View（用于计算滑块应摆放的位置） */
+    private static final Map<String, View> sliderStickerBodies = new HashMap<>();
+    /** 贴图 tag -> 贴在 stickerBody 上的布局监听（贴图缩放时让滑块跟随） */
+    private static final Map<String, ViewTreeObserver.OnGlobalLayoutListener> sliderLayoutListeners = new HashMap<>();
 
     /** 由 helper 创建的图片浮窗 tag 列表 */
     private static final List<String> helperImageTags = new ArrayList<>();
@@ -247,28 +256,26 @@ public class SharePasteHelper {
     /**
      * 为单个贴图接上「长按贴图本体 → 左侧弹出独立竖向透明度滑块浮窗，再次长按关闭」的交互。
      * 滑块是独立的 EasyFloat 浮窗（不影响贴图自身窗口的尺寸与缩放锚点），只作用于该贴图自身
-     * （imageOutterShadow），各贴图互不影响。
+     * （imageOutterShadow），各贴图互不影响。滑块会通过「贴图拖拽回调 + 贴图布局监听」实时跟随贴图移动。
      */
     public static void attachOpacitySlider(@NonNull Activity activity, @NonNull String imageTag,
                                            @NonNull View stickerBody) {
+        sliderStickerBodies.put(imageTag, stickerBody);
         stickerBody.setOnLongClickListener(v -> {
             String sliderTag = imageTag + "_opacity";
             // 已显示则关闭
             if (EasyFloat.getAppFloatView(sliderTag) != null) {
-                EasyFloat.dismissAppFloat(sliderTag);
+                dismissOpacitySlider(imageTag);
                 return true;
             }
-            // 计算贴图本体在屏幕中的位置，把滑块放到其左侧
+            // 先按贴图当前位置摆放，随后由 repositionSlider 校正到左侧并随拖拽/缩放跟随
             int[] loc = new int[2];
             stickerBody.getLocationOnScreen(loc);
-            int sliderX = loc[0] - 30;
-            if (sliderX < 0) sliderX = 0;
-            int sliderY = loc[1];
 
             EasyFloat.with(activity)
                     .setLayout(R.layout.opacity_slider)
                     .setShowPattern(ShowPattern.ALL_TIME)
-                    .setLocation(sliderX, sliderY)
+                    .setLocation(loc[0], loc[1])
                     .setTag(sliderTag)
                     .setDragEnable(false)
                     .show();
@@ -293,15 +300,75 @@ public class SharePasteHelper {
                 public void onStopTrackingTouch(SeekBar sb) {
                 }
             });
+
+            // 贴图缩放/尺寸变化时让滑块跟随（拖拽移动由 HomeFragment 的 drag 回调触发）
+            ViewTreeObserver.OnGlobalLayoutListener listener = () -> repositionSlider(imageTag);
+            sliderLayoutListeners.put(imageTag, listener);
+            stickerBody.getViewTreeObserver().addOnGlobalLayoutListener(listener);
+
+            // 初次摆放（等滑块自身布局完成后再算一次，保证尺寸准确）
+            repositionSlider(imageTag);
+            sliderView.post(() -> repositionSlider(imageTag));
             return true;
         });
+    }
+
+    /**
+     * 把滑块浮窗重新摆放到贴图左侧（贴图在屏幕上移动/缩放后调用）。
+     * EasyFloat 1.3.0 没有运行时改位置的 API，这里直接改 WindowManager 的 LayoutParams。
+     */
+    public static void repositionSlider(@NonNull String imageTag) {
+        String sliderTag = imageTag + "_opacity";
+        View sliderView = EasyFloat.getAppFloatView(sliderTag);
+        View body = sliderStickerBodies.get(imageTag);
+        if (sliderView == null || body == null) return;
+
+        int[] loc = new int[2];
+        body.getLocationOnScreen(loc);
+        int sw = body.getWidth();
+        int sh = body.getHeight();
+        int sliderW = sliderView.getWidth();
+        int sliderH = sliderView.getHeight();
+
+        // 优先放在贴图左侧；左边没空间则放到右侧
+        int x = loc[0] - sliderW - 12;
+        if (x < 0) x = loc[0] + sw + 12;
+        // 垂直方向与贴图居中对齐
+        int y = loc[1] + (sh - sliderH) / 2;
+        if (y < 0) y = 0;
+
+        moveFloatWindow(sliderView, x, y);
+    }
+
+    private static void moveFloatWindow(@NonNull View floatView, int x, int y) {
+        try {
+            WindowManager wm = (WindowManager) floatView.getContext().getSystemService(Context.WINDOW_SERVICE);
+            if (wm == null) return;
+            WindowManager.LayoutParams lp = (WindowManager.LayoutParams) floatView.getLayoutParams();
+            lp.x = x;
+            lp.y = y;
+            wm.updateViewLayout(floatView, lp);
+        } catch (Exception e) {
+            Log.e(TAG, "moveFloatWindow failed: " + e.getMessage());
+        }
     }
 
     /** 关闭某个贴图对应的透明度滑块浮窗（贴图被关闭/清空时调用） */
     public static void dismissOpacitySlider(@NonNull String imageTag) {
         String sliderTag = imageTag + "_opacity";
-        if (EasyFloat.getAppFloatView(sliderTag) != null) {
+        // 移除布局监听，避免泄漏
+        ViewTreeObserver.OnGlobalLayoutListener listener = sliderLayoutListeners.remove(imageTag);
+        View body = sliderStickerBodies.remove(imageTag);
+        if (listener != null && body != null) {
+            try {
+                body.getViewTreeObserver().removeOnGlobalLayoutListener(listener);
+            } catch (Exception ignored) {
+            }
+        }
+        try {
             EasyFloat.dismissAppFloat(sliderTag);
+        } catch (Exception e) {
+            Log.e(TAG, "dismissOpacitySlider failed: " + e.getMessage());
         }
     }
 
