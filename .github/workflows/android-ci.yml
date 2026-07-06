@@ -35,15 +35,28 @@ jobs:
         # AGP 加载 SDK 元数据时抛 NumberFormatException
         uses: android-actions/setup-android@v3
         with:
-          # 注意:cmdline-tools 9.0+ 需要 Java 17,而本项目 AGP 3.5.3 + Gradle 5.4.1
-          # 只能跑 Java 11,所以必须用 cmdline-tools 8.0(最后一个兼容 Java 11 的版本)
+          # cmdline-tools 8.0(8512546)— 最后一个兼容 Java 11 的版本
+          # 本项目配 JDK 11(AGP 3.5.3 / Gradle 5.4.1),cmdline-tools 9.0+ 需 Java 17
           cmdline-tools-version: '8512546'
-          # 用 packages 一次性列出所需组件(sdkmanager 格式)
-          packages: |
-            platforms;android-29
-            build-tools;29.0.3
-            platform-tools
+          # 显式接受许可证,避免首次构建卡在交互式 yes/no
           accept-android-sdk-licenses: true
+
+      - name: Install required SDK packages
+        # setup-android@v3 不再提供 platforms/build-tools 直接参数,改用 sdkmanager 显式安装
+        # 用最低版本 Java 11 兼容的包路径
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls -la "$ANDROID_HOME/cmdline-tools/"
+          # 找到 sdkmanager(cmdline-tools 8.0 布局是 cmdline-tools/8.0/bin/sdkmanager)
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)
+          echo "SDKMANAGER=$SDKMANAGER"
+          # 安装 platform-29 / build-tools 29.0.3 / platform-tools
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-29" "build-tools;29.0.3" "platform-tools"
+          echo "--- Installed packages ---"
+          "$SDKMANAGER" --list_installed | head -50
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
