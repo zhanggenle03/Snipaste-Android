@@ -33,7 +33,6 @@ import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.view.ScaleImage;
 
 import java.io.InputStream;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -52,8 +51,8 @@ public class SharePasteHelper {
     private static final Map<String, View> sliderStickerBodies = new HashMap<>();
     /** 贴图 tag -> 贴在 stickerBody 上的布局监听（贴图缩放时让滑块跟随） */
     private static final Map<String, ViewTreeObserver.OnGlobalLayoutListener> sliderLayoutListeners = new HashMap<>();
-    /** 贴图 tag -> 创建该贴图时所在的 Activity（用于新建滑块浮窗） */
-    private static final Map<String, WeakReference<Activity>> sliderActivities = new HashMap<>();
+    /** 贴图 tag -> 创建该贴图时所在的 Activity（强引用保存；文字贴图所在的瞬态 Activity 一旦被 WeakReference 回收，长按时就拿不到 Activity 而弹不出滑块。该 Activity 对象能成功创建贴图浮窗，就能成功创建滑块浮窗） */
+    private static final Map<String, Activity> sliderActivities = new HashMap<>();
     /** 贴图 tag -> 长按检测状态（在浮窗 touchEvent 回调里做带容差的长按判定） */
     private static final Map<String, LongPressState> lpStates = new HashMap<>();
 
@@ -313,11 +312,14 @@ public class SharePasteHelper {
      */
     public static void attachOpacitySlider(@NonNull Activity activity, @NonNull String imageTag,
                                            @NonNull View stickerBody) {
-        // 记录该贴图对应的本体与 Activity，长按由浮窗的 touchEvent 回调统一触发（见 handleFloatTouch），
+        // 记录该贴图对应的本体与 ApplicationContext，长按由浮窗的 touchEvent 回调统一触发（见 handleFloatTouch），
         // 不再依赖 stickerBody 的 OnLongClickListener——因为它嵌在可拖拽的 EasyFloat 内，手指微动即会取消
         // 框架长按，且内部 ScaleImage 吞掉了触摸事件，导致长按几乎不触发。
         sliderStickerBodies.put(imageTag, stickerBody);
-        sliderActivities.put(imageTag, new WeakReference<>(activity));
+        // 强引用保存创建贴图时的 Activity：文字/分享图片走 helper 路径时传入的是瞬态 Activity(贴出后即 finish)，
+        // 若用 WeakReference 会被回收导致长按时 activity 为 null、滑块弹不出。该 Activity 对象既然能创建贴图
+        // 浮窗，就能创建滑块浮窗；贴图销毁时由 dismissOpacitySlider 清理此引用。
+        sliderActivities.put(imageTag, activity);
 
         // 贴图缩放/尺寸变化时让滑块跟随（拖拽移动由浮窗 drag 回调 + touchEvent 触发）
         ViewTreeObserver.OnGlobalLayoutListener listener = () -> repositionSlider(imageTag);
@@ -336,8 +338,10 @@ public class SharePasteHelper {
             dismissOpacitySlider(imageTag);
             return;
         }
-        WeakReference<Activity> actRef = sliderActivities.get(imageTag);
-        Activity activity = actRef != null ? actRef.get() : null;
+        // 优先用创建贴图时的 Activity（强引用，永不为 null）；万一缺失则兜底取当前前台 Activity。
+        // 不能用 ApplicationContext：EasyFloat.with() 只接受 Activity。
+        Activity activity = sliderActivities.get(imageTag);
+        if (activity == null) activity = QDApplication.getCurrentActivity();
         View body = sliderStickerBodies.get(imageTag);
         if (activity == null || body == null) return;
 
@@ -348,12 +352,22 @@ public class SharePasteHelper {
             body.getViewTreeObserver().addOnGlobalLayoutListener(l);
         }
 
-        // 先放到屏幕外(-100,-100)，等滑块自身布局完成、拿到真实宽高后，再用 repositionSlider
-        // 精准定位到贴图旁侧（按左右空间自动选择），避免一闪压在贴图上。
+        // 关键：先用贴图当前的屏幕坐标算一个「可见的初始位置」直接显示，
+        // 保证即使后续的测量/重定位因为时机没跑成，滑块也一定出现在贴图旁（不再先放到屏幕外才挪入）。
+        int[] loc = new int[2];
+        body.getLocationOnScreen(loc);
+        int sw = body.getWidth();
+        int sh = body.getHeight();
+        int estW = 36, estH = 160; // opacity_slider 容器大致尺寸(mm)，用于初次估算
+        int initX = loc[0] - estW - 12;
+        if (initX < 0) initX = loc[0] + sw + 12; // 左边没空间则放右侧
+        int initY = loc[1] + (sh - estH) / 2;
+        if (initY < 0) initY = 0;
+
         EasyFloat.with(activity)
                 .setLayout(R.layout.opacity_slider)
                 .setShowPattern(ShowPattern.ALL_TIME)
-                .setLocation(-100, -100)
+                .setLocation(initX, initY)
                 .setTag(sliderTag)
                 .setDragEnable(false)
                 .show();
@@ -379,7 +393,7 @@ public class SharePasteHelper {
             }
         });
 
-        // 关键：等滑块自身完成布局（getWidth()/getHeight() > 0）再定位，保证不压在贴图上
+        // 测量完成后精确定位（按左右空间自动选侧），并用 post 兜底确保一定执行一次重定位
         sliderView.getViewTreeObserver().addOnGlobalLayoutListener(
                 new ViewTreeObserver.OnGlobalLayoutListener() {
                     @Override
@@ -390,6 +404,7 @@ public class SharePasteHelper {
                         }
                     }
                 });
+        sliderView.post(() -> repositionSlider(imageTag));
     }
 
     /**
@@ -465,12 +480,19 @@ public class SharePasteHelper {
 
     private static void moveFloatWindow(@NonNull View floatView, int x, int y) {
         try {
-            // getAppFloatView 返回的是我们布局的根 View，它被 EasyFloat 包在 frameLayout 里再加到
-            // WindowManager。真正的窗口根是 frameLayout（floatView.getParent()），其 LayoutParams 才是
-            // WindowManager.LayoutParams。必须用它的父级来更新位置，否则强转会抛异常、滑块卡在 (-100,-100)。
-            ViewParent parent = floatView.getParent();
-            if (!(parent instanceof View)) return;
-            View windowView = (View) parent;
+            // getAppFloatView 返回的是我们布局的根 View，它被 EasyFloat 包在若干层容器里再加到 WindowManager。
+            // 真正的「窗口根」是其中 LayoutParams 为 WindowManager.LayoutParams 的那一层。向上逐级查找它，
+            // 而不是直接取 getParent()（层级结构可能不止一层），找到后更新其位置参数。
+            View windowView = floatView;
+            ViewParent p = floatView.getParent();
+            while (p instanceof View) {
+                View pv = (View) p;
+                if (pv.getLayoutParams() instanceof WindowManager.LayoutParams) {
+                    windowView = pv;
+                    break;
+                }
+                p = pv.getParent();
+            }
             WindowManager wm = (WindowManager) windowView.getContext().getSystemService(Context.WINDOW_SERVICE);
             if (wm == null) return;
             WindowManager.LayoutParams lp = (WindowManager.LayoutParams) windowView.getLayoutParams();
@@ -490,6 +512,8 @@ public class SharePasteHelper {
         // 移除布局监听，避免泄漏
         ViewTreeObserver.OnGlobalLayoutListener listener = sliderLayoutListeners.remove(imageTag);
         View body = sliderStickerBodies.remove(imageTag);
+        // 释放对贴图 Activity 的强引用，避免泄漏
+        sliderActivities.remove(imageTag);
         if (listener != null && body != null) {
             try {
                 body.getViewTreeObserver().removeOnGlobalLayoutListener(listener);
