@@ -90,22 +90,6 @@
                 android:textColor="#999999"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"/>
-            <LinearLayout
-                android:gravity="bottom"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-                <com.ramotion.fluidslider.FluidSlider
-                    app:start_text="@string/transparent"
-                    app:end_text="@string/opaque"
-                    android:id="@+id/slider"
-                    app:bar_color="#eeeeee"
-                    app:bubble_text_color="@color/picture_color_white"
-                    app:bubble_color="#00a7e6"
-                    app:bar_text_color="#666666"
-                    app:size="normal"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"/>
-            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 

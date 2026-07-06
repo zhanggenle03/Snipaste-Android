@@ -12,6 +12,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.SeekBar;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -233,12 +234,46 @@ public class SharePasteHelper {
             }
         };
 
-        view.setOnClickListener(new DoubleClickListener() {
+        imageOutterShadow.setOnClickListener(new DoubleClickListener() {
             @Override
             public void onDoubleClick(View v) {
                 EasyFloat.dismissAppFloat(tag);
                 helperImageTags.remove(tag);
             }
+        });
+        setupOpacitySlider(view, imageOutterShadow);
+    }
+
+    /**
+     * 为单个贴图浮窗接上「长按贴图本体 → 左侧出现竖向透明度滑块，再次长按关闭」的交互。
+     * 透明度只作用于该贴图自身（imageOutterShadow），各贴图互不影响。
+     */
+    public static void setupOpacitySlider(View floatView, View stickerBody) {
+        SeekBar seekBar = floatView.findViewById(R.id.opacitySeekBar);
+        seekBar.setVisibility(View.GONE);
+        seekBar.setMax(100);
+        seekBar.setProgress((int) (stickerBody.getAlpha() * 100));
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                stickerBody.setAlpha(progress / 100f);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+        stickerBody.setOnLongClickListener(v -> {
+            boolean willShow = seekBar.getVisibility() != View.VISIBLE;
+            seekBar.setVisibility(willShow ? View.VISIBLE : View.GONE);
+            if (willShow) {
+                seekBar.setProgress((int) (stickerBody.getAlpha() * 100));
+            }
+            return true;
         });
     }
 

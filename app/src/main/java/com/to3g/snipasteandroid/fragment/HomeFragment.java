@@ -30,7 +30,6 @@ import com.qmuiteam.qmui.widget.QMUITopBarLayout;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
 import com.qmuiteam.qmui.widget.roundwidget.QMUIRoundButton;
-import com.ramotion.fluidslider.FluidSlider;
 import com.to3g.snipasteandroid.Listener.DoubleClickListener;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
@@ -51,7 +50,6 @@ import java.util.Objects;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
-import kotlin.Unit;
 
 @LatestVisitRecord
 @Widget(group = Group.Other, name = "Home")
@@ -77,11 +75,7 @@ public class HomeFragment extends BaseFragment {
     @BindView(R.id.cameraButton)
     QMUIRoundButton cameraButton;
 
-    @BindView(R.id.slider)
-    FluidSlider slider;
-
     private List<String> floatingImages = new ArrayList<>();
-    private float opacity = 1.0f;
 
 
     @Override
@@ -92,32 +86,7 @@ public class HomeFragment extends BaseFragment {
         // init the top bar
         initTopBar();
 
-        // init the bottom slider
-        slider.setPosition(1);
-        slider.setPositionListener(pos -> {
-            opacity = pos;
-            setFloatViewOpacity();
-            return Unit.INSTANCE;
-        });
-        setFloatViewOpacity();
         return root;
-    }
-
-    private void setFloatViewOpacity () {
-        // 遍历本 Fragment 创建的浮窗（图片与文字转图均为 image_paste 布局）
-        for (String path: floatingImages) {
-            View view = EasyFloat.getAppFloatView(path);
-            if (view != null) {
-                view.findViewById(R.id.imageOutterShadow).setAlpha(opacity);
-            }
-        }
-        // 遍历 SharePasteHelper 创建的浮窗
-        for (String tag : SharePasteHelper.getHelperImageTags()) {
-            View view = EasyFloat.getAppFloatView(tag);
-            if (view != null) {
-                view.findViewById(R.id.imageOutterShadow).setAlpha(opacity);
-            }
-        }
     }
 
     private void pasteCamera () {
@@ -320,14 +289,14 @@ public class HomeFragment extends BaseFragment {
 
             }
         };
-        view.setOnClickListener(new DoubleClickListener() {
+        imageOutterShadow.setOnClickListener(new DoubleClickListener() {
             @Override
             public void onDoubleClick(View v) {
                 EasyFloat.dismissAppFloat(path);
                 floatingImages.remove(path);
             }
         });
-        setFloatViewOpacity();
+        SharePasteHelper.setupOpacitySlider(view, imageOutterShadow);
     }
 
     private void initImageView(Bitmap bitmap) {
@@ -375,14 +344,14 @@ public class HomeFragment extends BaseFragment {
 
             }
         };
-        view.setOnClickListener(new DoubleClickListener() {
+        imageOutterShadow.setOnClickListener(new DoubleClickListener() {
             @Override
             public void onDoubleClick(View v) {
                 EasyFloat.dismissAppFloat(tagName);
                 floatingImages.remove(tagName);
             }
         });
-        setFloatViewOpacity();
+        SharePasteHelper.setupOpacitySlider(view, imageOutterShadow);
     }
 
     @OnClick(R.id.pasteTextButton)
