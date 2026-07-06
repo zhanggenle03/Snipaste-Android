@@ -281,7 +281,9 @@ public class HomeFragment extends BaseFragment {
                     }
 
                     @Override
-                    public void touchEvent(View view, MotionEvent event) { }
+                    public void touchEvent(View view, MotionEvent event) {
+                        SharePasteHelper.handleFloatTouch(path, event);
+                    }
 
                     @Override
                     public void drag(View view, MotionEvent event) {
@@ -362,7 +364,9 @@ public class HomeFragment extends BaseFragment {
                     }
 
                     @Override
-                    public void touchEvent(View view, MotionEvent event) { }
+                    public void touchEvent(View view, MotionEvent event) {
+                        SharePasteHelper.handleFloatTouch(tagName, event);
+                    }
 
                     @Override
                     public void drag(View view, MotionEvent event) {

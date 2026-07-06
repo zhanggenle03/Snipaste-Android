@@ -7,11 +7,14 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.SeekBar;
@@ -21,6 +24,7 @@ import androidx.annotation.NonNull;
 
 import com.lzf.easyfloat.EasyFloat;
 import com.lzf.easyfloat.enums.ShowPattern;
+import com.lzf.easyfloat.interfaces.OnFloatCallbacks;
 import com.lzf.easyfloat.permission.PermissionUtils;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
@@ -29,6 +33,7 @@ import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.view.ScaleImage;
 
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -47,9 +52,26 @@ public class SharePasteHelper {
     private static final Map<String, View> sliderStickerBodies = new HashMap<>();
     /** 贴图 tag -> 贴在 stickerBody 上的布局监听（贴图缩放时让滑块跟随） */
     private static final Map<String, ViewTreeObserver.OnGlobalLayoutListener> sliderLayoutListeners = new HashMap<>();
+    /** 贴图 tag -> 创建该贴图时所在的 Activity（用于新建滑块浮窗） */
+    private static final Map<String, WeakReference<Activity>> sliderActivities = new HashMap<>();
+    /** 贴图 tag -> 长按检测状态（在浮窗 touchEvent 回调里做带容差的长按判定） */
+    private static final Map<String, LongPressState> lpStates = new HashMap<>();
 
     /** 由 helper 创建的图片浮窗 tag 列表 */
     private static final List<String> helperImageTags = new ArrayList<>();
+
+    // 长按检测参数：按住超过该时长且位移不超过容差，即视为长按
+    private static final long LONG_PRESS_DELAY = 500;
+    private static final int LONG_PRESS_SLOP = 24; // px
+    private static final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    /** 浮窗 touchEvent 里的长按检测状态 */
+    private static class LongPressState {
+        float downX, downY;
+        boolean fired;
+        Runnable task;
+    }
+
 
     // ---------- 对外接口 ----------
 
@@ -200,6 +222,35 @@ public class SharePasteHelper {
                 .setShowPattern(ShowPattern.ALL_TIME)
                 .setLocation(100, 200)
                 .setTag(tag)
+                .registerCallbacks(new OnFloatCallbacks() {
+                    @Override
+                    public void createdResult(boolean isCreated, String msg, View view) { }
+
+                    @Override
+                    public void show(View view) { }
+
+                    @Override
+                    public void hide(View view) { }
+
+                    @Override
+                    public void dismiss() {
+                        // 贴图浮窗被销毁时，务必带走其透明度滑块，避免残留
+                        dismissOpacitySlider(tag);
+                    }
+
+                    @Override
+                    public void touchEvent(View view, MotionEvent event) {
+                        handleFloatTouch(tag, event);
+                    }
+
+                    @Override
+                    public void drag(View view, MotionEvent event) {
+                        repositionSlider(tag);
+                    }
+
+                    @Override
+                    public void dragEnd(View view) { }
+                })
                 .show();
 
         helperImageTags.add(tag);
@@ -247,6 +298,7 @@ public class SharePasteHelper {
             @Override
             public void onDoubleClick(View v) {
                 EasyFloat.dismissAppFloat(tag);
+                dismissOpacitySlider(tag);
                 helperImageTags.remove(tag);
             }
         });
@@ -261,64 +313,127 @@ public class SharePasteHelper {
      */
     public static void attachOpacitySlider(@NonNull Activity activity, @NonNull String imageTag,
                                            @NonNull View stickerBody) {
+        // 记录该贴图对应的本体与 Activity，长按由浮窗的 touchEvent 回调统一触发（见 handleFloatTouch），
+        // 不再依赖 stickerBody 的 OnLongClickListener——因为它嵌在可拖拽的 EasyFloat 内，手指微动即会取消
+        // 框架长按，且内部 ScaleImage 吞掉了触摸事件，导致长按几乎不触发。
         sliderStickerBodies.put(imageTag, stickerBody);
-        stickerBody.setOnLongClickListener(v -> {
-            String sliderTag = imageTag + "_opacity";
-            // 已显示则关闭
-            if (EasyFloat.getAppFloatView(sliderTag) != null) {
-                dismissOpacitySlider(imageTag);
-                return true;
+        sliderActivities.put(imageTag, new WeakReference<>(activity));
+
+        // 贴图缩放/尺寸变化时让滑块跟随（拖拽移动由浮窗 drag 回调 + touchEvent 触发）
+        ViewTreeObserver.OnGlobalLayoutListener listener = () -> repositionSlider(imageTag);
+        sliderLayoutListeners.put(imageTag, listener);
+        stickerBody.getViewTreeObserver().addOnGlobalLayoutListener(listener);
+    }
+
+    /**
+     * 长按贴图时切换透明度滑块：已显示则关闭，否则在贴图旁侧弹出独立竖向滑块浮窗。
+     * 滑块是独立的 EasyFloat 浮窗（不影响贴图自身窗口的尺寸与缩放锚点），只作用于该贴图自身。
+     */
+    public static void toggleOpacitySlider(@NonNull String imageTag) {
+        String sliderTag = imageTag + "_opacity";
+        // 已显示则关闭
+        if (EasyFloat.getAppFloatView(sliderTag) != null) {
+            dismissOpacitySlider(imageTag);
+            return;
+        }
+        WeakReference<Activity> actRef = sliderActivities.get(imageTag);
+        Activity activity = actRef != null ? actRef.get() : null;
+        View body = sliderStickerBodies.get(imageTag);
+        if (activity == null || body == null) return;
+
+        // 确保缩放跟随监听已挂载（上一次关闭滑块时可能已移除，重新显示后要补回）
+        if (!sliderLayoutListeners.containsKey(imageTag)) {
+            ViewTreeObserver.OnGlobalLayoutListener l = () -> repositionSlider(imageTag);
+            sliderLayoutListeners.put(imageTag, l);
+            body.getViewTreeObserver().addOnGlobalLayoutListener(l);
+        }
+
+        // 先放到屏幕外(-100,-100)，等滑块自身布局完成、拿到真实宽高后，再用 repositionSlider
+        // 精准定位到贴图旁侧（按左右空间自动选择），避免一闪压在贴图上。
+        EasyFloat.with(activity)
+                .setLayout(R.layout.opacity_slider)
+                .setShowPattern(ShowPattern.ALL_TIME)
+                .setLocation(-100, -100)
+                .setTag(sliderTag)
+                .setDragEnable(false)
+                .show();
+
+        View sliderView = EasyFloat.getAppFloatView(sliderTag);
+        if (sliderView == null) return;
+
+        SeekBar seekBar = sliderView.findViewById(R.id.opacitySeekBar);
+        seekBar.setMax(100);
+        seekBar.setProgress((int) (body.getAlpha() * 100));
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
+                body.setAlpha(progress / 100f);
             }
-            // 先放到屏幕外(-100,-100)，等滑块自身布局完成、拿到真实宽高后，再用 repositionSlider
-            // 精准定位到贴图旁侧（按左右空间自动选择）。避免初始一闪压在贴图上——之前直接 setLocation
-            // 用了贴图坐标，且测量未完成时宽高为 0，导致算出的坐标落在贴图正中。
-            EasyFloat.with(activity)
-                    .setLayout(R.layout.opacity_slider)
-                    .setShowPattern(ShowPattern.ALL_TIME)
-                    .setLocation(-100, -100)
-                    .setTag(sliderTag)
-                    .setDragEnable(false)
-                    .show();
 
-            View sliderView = EasyFloat.getAppFloatView(sliderTag);
-            if (sliderView == null) return true;
+            @Override
+            public void onStartTrackingTouch(SeekBar sb) {
+            }
 
-            SeekBar seekBar = sliderView.findViewById(R.id.opacitySeekBar);
-            seekBar.setMax(100);
-            seekBar.setProgress((int) (stickerBody.getAlpha() * 100));
-            seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override
-                public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
-                    stickerBody.setAlpha(progress / 100f);
-                }
-
-                @Override
-                public void onStartTrackingTouch(SeekBar sb) {
-                }
-
-                @Override
-                public void onStopTrackingTouch(SeekBar sb) {
-                }
-            });
-
-            // 贴图缩放/尺寸变化时让滑块跟随（拖拽移动由 HomeFragment 的 drag 回调触发）
-            ViewTreeObserver.OnGlobalLayoutListener listener = () -> repositionSlider(imageTag);
-            sliderLayoutListeners.put(imageTag, listener);
-            stickerBody.getViewTreeObserver().addOnGlobalLayoutListener(listener);
-
-            // 关键：等滑块自身完成布局（getWidth()/getHeight() > 0）再定位，保证不压在贴图上
-            sliderView.getViewTreeObserver().addOnGlobalLayoutListener(
-                    new ViewTreeObserver.OnGlobalLayoutListener() {
-                        @Override
-                        public void onGlobalLayout() {
-                            if (sliderView.getWidth() > 0 && sliderView.getHeight() > 0) {
-                                repositionSlider(imageTag);
-                                sliderView.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                            }
-                        }
-                    });
-            return true;
+            @Override
+            public void onStopTrackingTouch(SeekBar sb) {
+            }
         });
+
+        // 关键：等滑块自身完成布局（getWidth()/getHeight() > 0）再定位，保证不压在贴图上
+        sliderView.getViewTreeObserver().addOnGlobalLayoutListener(
+                new ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        if (sliderView.getWidth() > 0 && sliderView.getHeight() > 0) {
+                            repositionSlider(imageTag);
+                            sliderView.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                        }
+                    }
+                });
+    }
+
+    /**
+     * 在浮窗的 touchEvent 回调里做「带容差」的长按检测：按住超过 LONG_PRESS_DELAY 且位移不超过
+     * LONG_PRESS_SLOP 即触发 toggleOpacitySlider。放在浮窗层级而非 View 层级，可彻底避开内部 View
+     * 吞事件 / 框架长按被拖拽取消的问题。
+     */
+    public static void handleFloatTouch(@NonNull String tag, @NonNull MotionEvent event) {
+        LongPressState s = lpStates.get(tag);
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN: {
+                s = new LongPressState();
+                s.downX = event.getRawX();
+                s.downY = event.getRawY();
+                s.fired = false;
+                final String t = tag;
+                s.task = () -> {
+                    LongPressState st = lpStates.get(t);
+                    if (st != null && !st.fired) {
+                        st.fired = true;
+                        toggleOpacitySlider(t);
+                    }
+                };
+                lpStates.put(tag, s);
+                mainHandler.postDelayed(s.task, LONG_PRESS_DELAY);
+                break;
+            }
+            case MotionEvent.ACTION_MOVE: {
+                if (s == null) break;
+                float dist = (float) Math.hypot(event.getRawX() - s.downX, event.getRawY() - s.downY);
+                if (dist > LONG_PRESS_SLOP) {
+                    // 移动超过容差，取消本次长按
+                    if (s.task != null) mainHandler.removeCallbacks(s.task);
+                    s.fired = true;
+                }
+                break;
+            }
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL: {
+                if (s != null && s.task != null) mainHandler.removeCallbacks(s.task);
+                lpStates.remove(tag);
+                break;
+            }
+        }
     }
 
     /**
@@ -350,12 +465,18 @@ public class SharePasteHelper {
 
     private static void moveFloatWindow(@NonNull View floatView, int x, int y) {
         try {
-            WindowManager wm = (WindowManager) floatView.getContext().getSystemService(Context.WINDOW_SERVICE);
+            // getAppFloatView 返回的是我们布局的根 View，它被 EasyFloat 包在 frameLayout 里再加到
+            // WindowManager。真正的窗口根是 frameLayout（floatView.getParent()），其 LayoutParams 才是
+            // WindowManager.LayoutParams。必须用它的父级来更新位置，否则强转会抛异常、滑块卡在 (-100,-100)。
+            ViewParent parent = floatView.getParent();
+            if (!(parent instanceof View)) return;
+            View windowView = (View) parent;
+            WindowManager wm = (WindowManager) windowView.getContext().getSystemService(Context.WINDOW_SERVICE);
             if (wm == null) return;
-            WindowManager.LayoutParams lp = (WindowManager.LayoutParams) floatView.getLayoutParams();
+            WindowManager.LayoutParams lp = (WindowManager.LayoutParams) windowView.getLayoutParams();
             lp.x = x;
             lp.y = y;
-            wm.updateViewLayout(floatView, lp);
+            wm.updateViewLayout(windowView, lp);
         } catch (Exception e) {
             Log.e(TAG, "moveFloatWindow failed: " + e.getMessage());
         }
@@ -364,6 +485,8 @@ public class SharePasteHelper {
     /** 关闭某个贴图对应的透明度滑块浮窗（贴图被关闭/清空时调用） */
     public static void dismissOpacitySlider(@NonNull String imageTag) {
         String sliderTag = imageTag + "_opacity";
+        // 清理长按检测状态
+        lpStates.remove(imageTag);
         // 移除布局监听，避免泄漏
         ViewTreeObserver.OnGlobalLayoutListener listener = sliderLayoutListeners.remove(imageTag);
         View body = sliderStickerBodies.remove(imageTag);
