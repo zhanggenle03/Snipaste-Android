@@ -81,18 +81,30 @@ jobs:
           ls -la app/snipaste.keystore
 
       - name: Build with Gradle
-        # 启用 --info 拿到具体失败 task 与依赖解析日志,定位 51s 失败的真实原因
+        # 启用 --info 拿到具体失败 task 与依赖解析日志
         run: |
+          set -o pipefail
           ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
-          # 同时尝试 release
-          ./gradlew assembleRelease --no-daemon --stacktrace --info 2>&1 | tee -a build.log || echo "Release build skipped or failed, continuing..."
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "===== assembleDebug exit code: $EXIT_CODE ====="
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "===== build.log tail (last 200 lines) ====="
+            tail -200 build.log
+            exit $EXIT_CODE
+          fi
 
       - name: Collect built APKs
         if: always()
         run: |
           mkdir -p artifacts
-          find app/build/outputs/apk -name "*.apk" -exec cp {} artifacts/ \; || true
-          ls -la artifacts/ || echo "No APK found"
+          echo "===== Searching for APKs ====="
+          find . -name "*.apk" -type f 2>/dev/null || true
+          echo "===== Copying APKs to artifacts ====="
+          find . -name "*.apk" -type f -exec cp {} artifacts/ \; || true
+          echo "===== artifacts directory ====="
+          ls -la artifacts/ || echo "No artifacts"
+          echo "===== build/outputs tree ====="
+          ls -la app/build/outputs/ 2>/dev/null || echo "app/build/outputs does not exist"
 
       - name: Upload APK artifacts
         if: always()
