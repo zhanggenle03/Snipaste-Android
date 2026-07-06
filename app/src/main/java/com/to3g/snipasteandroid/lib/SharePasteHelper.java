@@ -7,8 +7,6 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -28,7 +26,6 @@ import com.lzf.easyfloat.interfaces.OnFloatCallbacks;
 import com.lzf.easyfloat.permission.PermissionUtils;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
-import com.to3g.snipasteandroid.Listener.DoubleClickListener;
 import com.to3g.snipasteandroid.QDApplication;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.view.ScaleImage;
@@ -52,25 +49,16 @@ public class SharePasteHelper {
     private static final Map<String, View> sliderStickerBodies = new HashMap<>();
     /** 贴图 tag -> 贴在 stickerBody 上的布局监听（贴图缩放时让滑块跟随） */
     private static final Map<String, ViewTreeObserver.OnGlobalLayoutListener> sliderLayoutListeners = new HashMap<>();
-    /** 贴图 tag -> 创建该贴图时所在的 Activity（强引用保存；文字贴图所在的瞬态 Activity 一旦被 WeakReference 回收，长按时就拿不到 Activity 而弹不出滑块。该 Activity 对象能成功创建贴图浮窗，就能成功创建滑块浮窗） */
+    /** 贴图 tag -> 创建该贴图时所在的 Activity（强引用保存；文字贴图所在的瞬态 Activity 一旦被 WeakReference 回收，双击时就拿不到 Activity 而弹不出滑块。该 Activity 对象能成功创建贴图浮窗，就能成功创建滑块浮窗） */
     private static final Map<String, Activity> sliderActivities = new HashMap<>();
-    /** 贴图 tag -> 长按检测状态（在浮窗 touchEvent 回调里做带容差的长按判定） */
-    private static final Map<String, LongPressState> lpStates = new HashMap<>();
+    /** 贴图 tag -> 上次点击时间（在浮窗 touchEvent 回调里做双击判定，双击弹出/收起透明度滑块） */
+    private static final Map<String, Long> lastTapTimes = new HashMap<>();
 
     /** 由 helper 创建的图片浮窗 tag 列表 */
     private static final List<String> helperImageTags = new ArrayList<>();
 
-    // 长按检测参数：按住超过该时长且位移不超过容差，即视为长按
-    private static final long LONG_PRESS_DELAY = 500;
-    private static final int LONG_PRESS_SLOP = 24; // px
-    private static final Handler mainHandler = new Handler(Looper.getMainLooper());
-
-    /** 浮窗 touchEvent 里的长按检测状态 */
-    private static class LongPressState {
-        float downX, downY;
-        boolean fired;
-        Runnable task;
-    }
+    // 双击判定阈值：两次 ACTION_DOWN 间隔小于该值即视为双击
+    private static final long DOUBLE_TAP_TIME = 300;
 
 
     // ---------- 对外接口 ----------
@@ -294,31 +282,33 @@ public class SharePasteHelper {
             }
         };
 
-        imageOutterShadow.setOnClickListener(new DoubleClickListener() {
-            @Override
-            public void onDoubleClick(View v) {
+        // 双击弹出/收起透明度滑块的逻辑已移到浮窗 touchEvent -> handleFloatTouch（原长按改为双击）。
+        // 这里仅给右上角 X 按钮接「关闭贴图」。
+        View closeButton = view.findViewById(R.id.closeButton);
+        if (closeButton != null) {
+            closeButton.setOnClickListener(v -> {
                 EasyFloat.dismissAppFloat(tag);
                 dismissOpacitySlider(tag);
                 helperImageTags.remove(tag);
-            }
-        });
+            });
+        }
         attachOpacitySlider(activity, tag, imageOutterShadow);
     }
 
     /**
-     * 为单个贴图接上「长按贴图本体 → 旁侧弹出独立竖向透明度滑块浮窗，再次长按关闭」的交互。
+     * 为单个贴图接上「双击贴图本体 → 旁侧弹出独立竖向透明度滑块浮窗，再次双击关闭」的交互。
      * 滑块是独立的 EasyFloat 浮窗（不影响贴图自身窗口的尺寸与缩放锚点），只作用于该贴图自身
      * （imageOutterShadow），各贴图互不影响。初始与移动时都按「贴图左右两侧谁有空间」自动选择摆放侧，
      * 并通过「贴图拖拽回调 + 贴图布局监听」实时跟随贴图移动。
      */
     public static void attachOpacitySlider(@NonNull Activity activity, @NonNull String imageTag,
                                            @NonNull View stickerBody) {
-        // 记录该贴图对应的本体与 ApplicationContext，长按由浮窗的 touchEvent 回调统一触发（见 handleFloatTouch），
+        // 记录该贴图对应的本体与 ApplicationContext，双击由浮窗的 touchEvent 回调统一触发（见 handleFloatTouch），
         // 不再依赖 stickerBody 的 OnLongClickListener——因为它嵌在可拖拽的 EasyFloat 内，手指微动即会取消
         // 框架长按，且内部 ScaleImage 吞掉了触摸事件，导致长按几乎不触发。
         sliderStickerBodies.put(imageTag, stickerBody);
         // 强引用保存创建贴图时的 Activity：文字/分享图片走 helper 路径时传入的是瞬态 Activity(贴出后即 finish)，
-        // 若用 WeakReference 会被回收导致长按时 activity 为 null、滑块弹不出。该 Activity 对象既然能创建贴图
+        // 若用 WeakReference 会被回收导致双击时 activity 为 null、滑块弹不出。该 Activity 对象既然能创建贴图
         // 浮窗，就能创建滑块浮窗；贴图销毁时由 dismissOpacitySlider 清理此引用。
         sliderActivities.put(imageTag, activity);
 
@@ -329,13 +319,13 @@ public class SharePasteHelper {
     }
 
     /**
-     * 长按贴图时切换透明度滑块：已显示则关闭，否则在贴图旁侧弹出独立竖向滑块浮窗。
+     * 双击贴图时切换透明度滑块：已显示则关闭，否则在贴图旁侧弹出独立竖向滑块浮窗。
      * 滑块是独立的 EasyFloat 浮窗（不影响贴图自身窗口的尺寸与缩放锚点），只作用于该贴图自身。
      */
     public static void toggleOpacitySlider(@NonNull String imageTag) {
         String sliderTag = imageTag + "_opacity";
         // 已显示则关闭。注意：这里只收起滑块浮窗，【不】清除贴图本体/Activity 引用
-        // （用 hideOpacitySlider），否则同一张贴图下次长按会因 body 为 null 而弹不出滑块。
+        // （用 hideOpacitySlider），否则同一张贴图下次双击会因 body 为 null 而弹不出滑块。
         // 贴图被真正销毁时才走 dismissOpacitySlider 做完整清理。
         if (EasyFloat.getAppFloatView(sliderTag) != null) {
             hideOpacitySlider(imageTag);
@@ -411,46 +401,19 @@ public class SharePasteHelper {
     }
 
     /**
-     * 在浮窗的 touchEvent 回调里做「带容差」的长按检测：按住超过 LONG_PRESS_DELAY 且位移不超过
-     * LONG_PRESS_SLOP 即触发 toggleOpacitySlider。放在浮窗层级而非 View 层级，可彻底避开内部 View
-     * 吞事件 / 框架长按被拖拽取消的问题。
+     * 在浮窗的 touchEvent 回调里做「双击」判定：两次 ACTION_DOWN 间隔小于 DOUBLE_TAP_TIME 即触发
+     * toggleOpacitySlider（弹出/收起透明度滑块）。放在浮窗层级而非 View 层级，可彻底避开内部 View
+     * 吞事件 / 框架手势被拖拽取消的问题。原「长按」交互已改为「双击」。
      */
     public static void handleFloatTouch(@NonNull String tag, @NonNull MotionEvent event) {
-        LongPressState s = lpStates.get(tag);
-        switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN: {
-                s = new LongPressState();
-                s.downX = event.getRawX();
-                s.downY = event.getRawY();
-                s.fired = false;
-                final String t = tag;
-                s.task = () -> {
-                    LongPressState st = lpStates.get(t);
-                    if (st != null && !st.fired) {
-                        st.fired = true;
-                        toggleOpacitySlider(t);
-                    }
-                };
-                lpStates.put(tag, s);
-                mainHandler.postDelayed(s.task, LONG_PRESS_DELAY);
-                break;
-            }
-            case MotionEvent.ACTION_MOVE: {
-                if (s == null) break;
-                float dist = (float) Math.hypot(event.getRawX() - s.downX, event.getRawY() - s.downY);
-                if (dist > LONG_PRESS_SLOP) {
-                    // 移动超过容差，取消本次长按
-                    if (s.task != null) mainHandler.removeCallbacks(s.task);
-                    s.fired = true;
-                }
-                break;
-            }
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL: {
-                if (s != null && s.task != null) mainHandler.removeCallbacks(s.task);
-                lpStates.remove(tag);
-                break;
-            }
+        if (event.getAction() != MotionEvent.ACTION_DOWN) return;
+        long now = System.currentTimeMillis();
+        Long prev = lastTapTimes.get(tag);
+        if (prev != null && (now - prev) < DOUBLE_TAP_TIME) {
+            lastTapTimes.remove(tag);
+            toggleOpacitySlider(tag); // 双击：弹出/收起透明度滑块
+        } else {
+            lastTapTimes.put(tag, now);
         }
     }
 
@@ -508,14 +471,14 @@ public class SharePasteHelper {
     }
 
     /**
-     * 仅收起透明度滑块浮窗（用户再次长按关闭时调用）。
+     * 仅收起透明度滑块浮窗（用户再次双击关闭时调用）。
      * 与 dismissOpacitySlider 的区别：这里【不】移除 sliderStickerBodies / sliderActivities /
-     * sliderLayoutListeners 等贴图本体引用，因为贴图本身还活着，下次长按仍需用它们重新弹出滑块。
-     * 只清理本次长按判定状态并 dismiss 浮窗。贴图被真正销毁时仍走 dismissOpacitySlider 做完整清理。
+     * sliderLayoutListeners 等贴图本体引用，因为贴图本身还活着，下次双击仍需用它们重新弹出滑块。
+     * 只清理本次双击判定状态并 dismiss 浮窗。贴图被真正销毁时仍走 dismissOpacitySlider 做完整清理。
      */
     public static void hideOpacitySlider(@NonNull String imageTag) {
         String sliderTag = imageTag + "_opacity";
-        lpStates.remove(imageTag); // 清掉本次长按已触发的状态，避免重复触发
+        lastTapTimes.remove(imageTag); // 清掉本次双击的待判定状态，避免重复触发
         try {
             EasyFloat.dismissAppFloat(sliderTag);
         } catch (Exception e) {
@@ -526,8 +489,8 @@ public class SharePasteHelper {
     /** 关闭某个贴图对应的透明度滑块浮窗（贴图被关闭/清空时调用，做完整清理以防泄漏） */
     public static void dismissOpacitySlider(@NonNull String imageTag) {
         String sliderTag = imageTag + "_opacity";
-        // 清理长按检测状态
-        lpStates.remove(imageTag);
+        // 清理双击检测状态
+        lastTapTimes.remove(imageTag);
         // 移除布局监听，避免泄漏
         ViewTreeObserver.OnGlobalLayoutListener listener = sliderLayoutListeners.remove(imageTag);
         View body = sliderStickerBodies.remove(imageTag);

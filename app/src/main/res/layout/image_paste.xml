@@ -22,5 +22,18 @@
             android:layout_alignParentBottom="true"
             android:layout_alignParentEnd="true"
             />
+
+        <!-- 右上角关闭按钮：单击关闭贴图（替代原来的双击关闭） -->
+        <ImageButton
+            android:id="@+id/closeButton"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentEnd="true"
+            android:layout_margin="4dp"
+            android:background="@null"
+            android:src="@drawable/icon_popup_close_with_bg_dark"
+            android:scaleType="fitCenter"
+            android:contentDescription="关闭贴图" />
     </RelativeLayout>
 </com.dd.ShadowLayout>

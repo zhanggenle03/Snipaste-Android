@@ -31,7 +31,6 @@ import com.qmuiteam.qmui.widget.QMUITopBarLayout;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
 import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
 import com.qmuiteam.qmui.widget.roundwidget.QMUIRoundButton;
-import com.to3g.snipasteandroid.Listener.DoubleClickListener;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
 import com.to3g.snipasteandroid.lib.ClipBoardUtil;
@@ -319,14 +318,16 @@ public class HomeFragment extends BaseFragment {
 
             }
         };
-        imageOutterShadow.setOnClickListener(new DoubleClickListener() {
-            @Override
-            public void onDoubleClick(View v) {
+        // 双击弹出/收起透明度滑块的逻辑已移到浮窗 touchEvent -> SharePasteHelper.handleFloatTouch（原长按改为双击）。
+        // 这里仅给右上角 X 按钮接「关闭贴图」。
+        View closeButton = view.findViewById(R.id.closeButton);
+        if (closeButton != null) {
+            closeButton.setOnClickListener(v -> {
                 EasyFloat.dismissAppFloat(path);
                 SharePasteHelper.dismissOpacitySlider(path);
                 floatingImages.remove(path);
-            }
-        });
+            });
+        }
         SharePasteHelper.attachOpacitySlider(getActivity(), path, imageOutterShadow);
     }
 
@@ -404,14 +405,16 @@ public class HomeFragment extends BaseFragment {
 
             }
         };
-        imageOutterShadow.setOnClickListener(new DoubleClickListener() {
-            @Override
-            public void onDoubleClick(View v) {
+        // 双击弹出/收起透明度滑块的逻辑已移到浮窗 touchEvent -> SharePasteHelper.handleFloatTouch（原长按改为双击）。
+        // 这里仅给右上角 X 按钮接「关闭贴图」。
+        View closeButton = view.findViewById(R.id.closeButton);
+        if (closeButton != null) {
+            closeButton.setOnClickListener(v -> {
                 EasyFloat.dismissAppFloat(tagName);
                 SharePasteHelper.dismissOpacitySlider(tagName);
                 floatingImages.remove(tagName);
-            }
-        });
+            });
+        }
         SharePasteHelper.attachOpacitySlider(getActivity(), tagName, imageOutterShadow);
     }
 
