@@ -20,6 +20,17 @@ android {
         sourceCompatibility javaVersion
         targetCompatibility javaVersion
     }
+    signingConfigs {
+        // CI 注入的自定义 keystore(由 GitHub Actions 写入),无则保持空配置
+        if (file('snipaste.keystore').exists()) {
+            myRelease {
+                storeFile file('snipaste.keystore')
+                storePassword 'snipaste'
+                keyAlias 'snipaste'
+                keyPassword 'snipaste'
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
@@ -31,15 +42,6 @@ android {
                 signingConfig signingConfigs.debug
             }
         }
-    }
-}
-
-signingConfigs {
-    myRelease {
-        storeFile file('snipaste.keystore')
-        storePassword 'snipaste'
-        keyAlias 'snipaste'
-        keyPassword 'snipaste'
     }
 }
 
