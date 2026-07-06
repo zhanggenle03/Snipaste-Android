@@ -41,6 +41,8 @@
     <string name="cancelText">取消</string>
     <string name="toOpen">去开启</string>
     <string name="needFloatingPermission">需要悬浮窗权限才能悬浮</string>
+    <string name="qs_clipboard_paste">贴剪贴板文字</string>
+    <string name="clipboardEmpty">剪贴板没有文字</string>
     <string name="transparent">透明</string>
     <string name="opaque">不透明</string>
 </resources>
