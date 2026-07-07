@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.fragment.QDWebExplorerFragment;
 
 /**

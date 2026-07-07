@@ -30,8 +30,7 @@ import com.lzf.easyfloat.EasyFloat;
 import com.lzf.easyfloat.enums.ShowPattern;
 import com.lzf.easyfloat.interfaces.OnFloatCallbacks;
 import com.lzf.easyfloat.permission.PermissionUtils;
-import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
-import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.to3g.snipasteandroid.QDApplication;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.view.ScaleImage;
@@ -218,12 +217,11 @@ public class SharePasteHelper {
             showFloatText(activity, content);
         } else {
             // 引导开启悬浮窗权限
-            new QMUIDialog.MessageDialogBuilder(activity)
+            new MaterialAlertDialogBuilder(activity)
                     .setMessage(activity.getText(R.string.floatingPermissionText))
-                    .addAction(activity.getText(R.string.cancelText), (dialog, index) -> dialog.dismiss())
-                    .addAction(0, activity.getText(R.string.toOpen),
-                            QMUIDialogAction.ACTION_PROP_POSITIVE,
-                            (dialog, index) -> {
+                    .setNegativeButton(activity.getText(R.string.cancelText), (dialog, which) -> dialog.dismiss())
+                    .setPositiveButton(activity.getText(R.string.toOpen),
+                            (dialog, which) -> {
                                 dialog.dismiss();
                                 PermissionUtils.requestPermission(activity, result -> {
                                     if (result) {
@@ -235,7 +233,7 @@ public class SharePasteHelper {
                                     }
                                 });
                             })
-                    .create(R.style.QMUI_Dialog).show();
+                    .show();
         }
     }
 
@@ -274,12 +272,11 @@ public class SharePasteHelper {
             }
         } else {
             // 引导开启悬浮窗权限
-            new QMUIDialog.MessageDialogBuilder(activity)
+            new MaterialAlertDialogBuilder(activity)
                     .setMessage(activity.getText(R.string.floatingPermissionText))
-                    .addAction(activity.getText(R.string.cancelText), (dialog, index) -> dialog.dismiss())
-                    .addAction(0, activity.getText(R.string.toOpen),
-                            QMUIDialogAction.ACTION_PROP_POSITIVE,
-                            (dialog, index) -> {
+                    .setNegativeButton(activity.getText(R.string.cancelText), (dialog, which) -> dialog.dismiss())
+                    .setPositiveButton(activity.getText(R.string.toOpen),
+                            (dialog, which) -> {
                                 dialog.dismiss();
                                 PermissionUtils.requestPermission(activity, result -> {
                                     if (result) {
@@ -294,7 +291,7 @@ public class SharePasteHelper {
                                     }
                                 });
                             })
-                    .create(R.style.QMUI_Dialog).show();
+                    .show();
         }
     }
 

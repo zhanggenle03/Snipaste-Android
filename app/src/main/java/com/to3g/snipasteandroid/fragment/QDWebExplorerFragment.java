@@ -9,6 +9,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.DownloadListener;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
@@ -24,9 +25,8 @@ import com.to3g.snipasteandroid.view.QDWebView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.io.UnsupportedEncodingException;
-import java.lang.reflect.Field;
 import java.net.URLDecoder;
-import java.text.TextUtils;
+import android.text.TextUtils;
 
 /**
  * 内嵌 WebView 浏览器（原基于 QMUIWebView，现改用标准 WebView）。
@@ -154,23 +154,8 @@ public class QDWebExplorerFragment extends BaseFragment {
     }
 
     public static void setZoomControlGone(WebView webView) {
+        // 高版本 WebView 已移除 ZoomButtonsController，隐藏缩放控件用标准 API 即可
         webView.getSettings().setDisplayZoomControls(false);
-        Class<?> classType;
-        Field field;
-        try {
-            classType = WebView.class;
-            field = classType.getDeclaredField("mZoomButtonsController");
-            field.setAccessible(true);
-            android.webkit.ZoomButtonsController zoomButtonsController = new android.webkit.ZoomButtonsController(webView);
-            zoomButtonsController.getZoomControls().setVisibility(View.GONE);
-            try {
-                field.set(webView, zoomButtonsController);
-            } catch (IllegalArgumentException | IllegalAccessException e) {
-                e.printStackTrace();
-            }
-        } catch (SecurityException | NoSuchFieldException e) {
-            e.printStackTrace();
-        }
     }
 
     public static class ExplorerWebViewChromeClient extends WebChromeClient {
