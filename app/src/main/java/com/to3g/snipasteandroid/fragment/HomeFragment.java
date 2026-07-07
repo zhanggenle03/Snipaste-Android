@@ -1,9 +1,12 @@
 package com.to3g.snipasteandroid.fragment;
 
-import android.content.Intent;
+import android.content.Context;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -15,13 +18,11 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.content.FileProvider;
+import androidx.core.content.ContextCompat;
 
-import com.luck.picture.lib.PictureSelector;
-import com.luck.picture.lib.config.PictureConfig;
-import com.luck.picture.lib.config.PictureMimeType;
-import com.luck.picture.lib.entity.LocalMedia;
 import com.lzf.easyfloat.EasyFloat;
 import com.lzf.easyfloat.enums.ShowPattern;
 import com.lzf.easyfloat.interfaces.OnFloatCallbacks;
@@ -30,7 +31,6 @@ import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
 import com.to3g.snipasteandroid.databinding.HomeLayoutBinding;
 import com.to3g.snipasteandroid.lib.ClipBoardUtil;
-import com.to3g.snipasteandroid.lib.GlideEngine;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.ImageUtil;
 import com.to3g.snipasteandroid.lib.SharePasteHelper;
@@ -41,6 +41,9 @@ import com.to3g.snipasteandroid.view.ScaleImage;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -53,6 +56,26 @@ public class HomeFragment extends BaseFragment {
     private HomeLayoutBinding binding;
     private List<String> floatingImages = new ArrayList<>();
 
+    /** 拍照临时文件：TakePicture 契约需要一个可写的 Uri */
+    private File cameraTempFile;
+
+    /** 选图（GetContent）：返回 content:// Uri */
+    private final ActivityResultLauncher<String> albumLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), this::onAlbumResult);
+
+    /** 拍照（TakePicture）：需要一个可写的 Uri */
+    private final ActivityResultLauncher<Uri> cameraLauncher =
+            registerForActivityResult(new ActivityResultContracts.TakePicture(), this::onCameraResult);
+
+    /** 相机权限请求：授权后启动拍照，拒绝时只提示、不崩溃 */
+    private final ActivityResultLauncher<String> cameraPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                if (Boolean.TRUE.equals(granted)) {
+                    launchCamera();
+                } else if (getContext() != null) {
+                    Toast.makeText(getContext(), R.string.camera_permission_denied, Toast.LENGTH_SHORT).show();
+                }
+            });
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -65,76 +88,114 @@ public class HomeFragment extends BaseFragment {
         return binding.getRoot();
     }
 
-    private void pasteCamera() {
-        PictureSelector
-                .create(getActivity())
-                .openCamera(PictureMimeType.ofImage())
-                .loadImageEngine(GlideEngine.createGlideEngine())
-                .enableCrop(true)
-                .freeStyleCropEnabled(true)
-                .forResult(result -> {
-                    if (result.size() > 0) {
-                        LocalMedia localMedia = result.get(0);
-                        String path = localMedia.getCutPath();
-                        Log.d(TAG, "onResult: " + path);
-                        File file = new File(path);
-                        if (file.exists()) {
-                            initImageView(path);
-                        }
-                    }
-                });
-    }
-
     /**
-     * When click the camera button
+     * 点击相机按钮：先要悬浮窗权限，再确认相机权限，最后打开系统相机。
+     * 使用系统原生 TakePicture 契约，照片写入 App 私有 cache 目录，无需存储权限。
      */
     protected void onCameraButtonClick() {
-        ensureFloatPermissionThen(this::pasteCamera);
-    }
-
-    private void pasteAlbum() {
-        PictureSelector
-                .create(getActivity())
-                .openGallery(PictureMimeType.ofImage())
-                .loadImageEngine(GlideEngine.createGlideEngine())
-                .enableCrop(true)
-                .freeStyleCropEnabled(true)
-                .selectionMode(PictureConfig.SINGLE)
-                .isSingleDirectReturn(true)
-                .forResult(result -> {
-                    if (result.size() > 0) {
-                        LocalMedia localMedia = result.get(0);
-                        String path = localMedia.getCutPath();
-                        Log.d(TAG, "onResult: " + path);
-                        File file = new File(path);
-                        if (file.exists()) {
-                            initImageView(path);
-                        }
-                    }
-                });
+        ensureFloatPermissionThen(this::ensureCameraPermissionThenLaunch);
     }
 
     /**
-     * When click the album button
+     * 打开相机前确认 CAMERA 权限。未授予则弹系统授权框；被拒绝时只提示、不崩溃。
+     * 注意：即使使用系统 TakePicture 契约，声明了 CAMERA 权限的 App 在较新 Android 上
+     * 仍需运行时获得该权限，否则启动相机 Intent 会抛 SecurityException 导致闪退。
+     */
+    private void ensureCameraPermissionThenLaunch() {
+        Context context = getContext();
+        if (context == null) {
+            return;
+        }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED) {
+            launchCamera();
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
+        }
+    }
+
+    private void launchCamera() {
+        Context context = getContext();
+        if (context == null) {
+            return;
+        }
+        File dir = context.getExternalCacheDir();
+        if (dir == null) {
+            Toast.makeText(context, R.string.file_access_failed, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        cameraTempFile = new File(dir, "snipaste_camera_" + System.currentTimeMillis() + ".jpg");
+        Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", cameraTempFile);
+        cameraLauncher.launch(uri);
+    }
+
+    private void onCameraResult(Boolean success) {
+        if (Boolean.TRUE.equals(success) && cameraTempFile != null && cameraTempFile.exists()) {
+            Log.d(TAG, "onCameraResult: " + cameraTempFile.getAbsolutePath());
+            initImageView(cameraTempFile.getAbsolutePath());
+        }
+        cameraTempFile = null;
+    }
+
+    /**
+     * 点击相册按钮：先要悬浮窗权限，再打开系统/原生照片选择器。
+     * 使用系统原生 GetContent，Android 13+ 走 Photo Picker，无需存储权限。
      */
     protected void onAlbumButtonClick() {
-        ensureFloatPermissionThen(this::pasteAlbum);
+        ensureFloatPermissionThen(this::launchAlbum);
+    }
+
+    private void launchAlbum() {
+        albumLauncher.launch("image/*");
+    }
+
+    private void onAlbumResult(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        Log.d(TAG, "onAlbumResult: " + uri);
+        String path = copyUriToTempFile(uri);
+        if (path != null) {
+            initImageView(path);
+        } else if (getContext() != null) {
+            Toast.makeText(getContext(), R.string.file_access_failed, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 把系统返回的 content:// Uri 拷贝到 App 私有 cache 目录，得到真实文件路径，
+     * 以便复用现有的 initImageView(String path) 流程（ImageUtil 取尺寸 + Drawable.createFromPath）。
+     */
+    private String copyUriToTempFile(Uri uri) {
+        Context context = getContext();
+        if (context == null) {
+            return null;
+        }
+        File dir = context.getExternalCacheDir();
+        if (dir == null) {
+            return null;
+        }
+        File out = new File(dir, "snipaste_album_" + System.currentTimeMillis() + ".jpg");
+        try (InputStream is = context.getContentResolver().openInputStream(uri);
+             FileOutputStream os = new FileOutputStream(out)) {
+            if (is == null) {
+                return null;
+            }
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = is.read(buf)) > 0) {
+                os.write(buf, 0, len);
+            }
+            return out.getAbsolutePath();
+        } catch (IOException e) {
+            Log.e(TAG, "copyUriToTempFile failed", e);
+            return null;
+        }
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-    }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        Log.d(TAG, "onActivityResult: ");
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
     private ViewGroup.LayoutParams getDefaultParams(String path, ViewGroup.LayoutParams layoutParams) {

@@ -49,7 +49,6 @@ public class PermissionListFragment extends BaseFragment {
     private void initList() {
         PermissionItem[] items = new PermissionItem[]{
                 new PermissionItem(getString(R.string.perm_overlay_title), getString(R.string.perm_overlay_desc)),
-                new PermissionItem(getString(R.string.perm_storage_title), getString(R.string.perm_storage_desc)),
                 new PermissionItem(getString(R.string.perm_camera_title), getString(R.string.perm_camera_desc)),
                 new PermissionItem(getString(R.string.perm_foreground_title), getString(R.string.perm_foreground_desc)),
         };

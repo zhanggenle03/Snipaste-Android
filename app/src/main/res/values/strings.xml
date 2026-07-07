@@ -70,10 +70,10 @@
     <string name="perm_go_settings">前往设置</string>
     <string name="perm_overlay_title">悬浮窗</string>
     <string name="perm_overlay_desc">允许应用在其他应用上层显示悬浮窗</string>
-    <string name="perm_storage_title">存储空间</string>
-    <string name="perm_storage_desc">用于保存与读取贴图图片</string>
     <string name="perm_camera_title">相机</string>
     <string name="perm_camera_desc">用于拍摄图片并贴到屏幕</string>
     <string name="perm_foreground_title">前台服务</string>
     <string name="perm_foreground_desc">保持贴图在后台持续运行</string>
+    <string name="file_access_failed">无法访问图片文件</string>
+    <string name="camera_permission_denied">相机权限被拒绝，无法拍照</string>
 </resources>
