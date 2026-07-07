@@ -751,9 +751,25 @@ public class SharePasteHelper {
         }
     }
 
-    /** 关闭所有贴图的回调：由主页注册，复用主页右上角「关闭所有贴图」入口实现 */
+    /** 关闭所有贴图的回调：由主页注册，复用主页右上角「关闭所有贴图」入口实现。
+     *  注意：本回调仅在主界面(HomeFragment)存活时有效；磁贴/分享入口创建的贴图不保证主界面存活，
+     *  故「关闭所有」应以 closeAllStickers() 为准、本回调仅作为最佳努力的补充。 */
     private static Runnable sCloseAllCallback;
     public static void setCloseAllCallback(Runnable cb) { sCloseAllCallback = cb; }
+
+    /**
+     * 关闭所有由本 helper 创建的贴图（磁贴/分享）。自包含、不依赖任何外部回调，
+     * 因此即使主界面 HomeFragment 已销毁（如直接走磁贴/分享入口贴图后未打开主界面），
+     * 也能从贴图拖出操作条里的「关闭所有贴图」按钮正常清掉它们。
+     * 主界面仍在时，再额外触发其回调一并关闭主界面自身创建的贴图（最佳努力）。
+     */
+    public static void closeAllStickers() {
+        for (String tag : new ArrayList<>(helperImageTags)) {
+            closeSticker(tag);
+        }
+        helperImageTags.clear();
+        if (sCloseAllCallback != null) sCloseAllCallback.run();
+    }
 
     /** 底部居中弹出操作条（收起 / 关闭 / 取消） */
     private static void showActionSheet(@NonNull String tag) {
@@ -785,7 +801,8 @@ public class SharePasteHelper {
         View btnCloseAll = sheet.findViewById(R.id.btnCloseAll);
         if (btnCloseAll != null) btnCloseAll.setOnClickListener(v -> {
             dismissActionSheet(tag);
-            if (sCloseAllCallback != null) sCloseAllCallback.run();
+            // 自包含的关闭全部：即使主界面已销毁（磁贴/分享入口贴图场景）也能生效
+            closeAllStickers();
         });
         if (btnCancel != null) btnCancel.setOnClickListener(v -> {
             dismissActionSheet(tag);
