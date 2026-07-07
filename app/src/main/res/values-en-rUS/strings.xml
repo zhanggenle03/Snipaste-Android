@@ -21,6 +21,7 @@
     <string name="pasteTextButtonText">float clipboard text</string>
     <string name="pasteTextEditHint">input some text ...</string>
     <string name="clear_text">clear</string>
+    <string name="close_all_stickers">close all stickers</string>
     <string name="paste_on_screen">float on the screen</string>
     <string name="paste_title_2">float picture</string>
     <string name="setting">settings</string>

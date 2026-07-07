@@ -86,6 +86,7 @@ public class HomeFragment extends BaseFragment {
         binding.albumButton.setOnClickListener(v -> onAlbumButtonClick());
         binding.cameraButton.setOnClickListener(v -> onCameraButtonClick());
         binding.clearTextButton.setOnClickListener(v -> binding.editText.setText(""));
+        SharePasteHelper.setCloseAllCallback(this::clearAllFloatViews);
         return binding.getRoot();
     }
 
@@ -197,6 +198,7 @@ public class HomeFragment extends BaseFragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        SharePasteHelper.setCloseAllCallback(null);
     }
 
     private ViewGroup.LayoutParams getDefaultParams(String path, ViewGroup.LayoutParams layoutParams) {
