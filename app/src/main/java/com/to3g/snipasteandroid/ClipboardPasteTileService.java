@@ -1,14 +1,20 @@
 package com.to3g.snipasteandroid;
 
+import android.app.PendingIntent;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.service.quicksettings.Tile;
 import android.service.quicksettings.TileService;
+import android.util.Log;
 
 /**
- * 控制中心（Quick Settings）磁贴：长按控制中心编辑区加入后即可显示。
- * 点按磁贴直接读取剪切板文字并贴成悬浮贴图。
+ * 控制中心（Quick Settings）磁贴：一键添加后点按即读取剪切板文字并贴成悬浮贴图。
+ * 通过 onTileAdded / onTileRemoved 配合本地存储跟踪磁贴的添加状态。
  */
 public class ClipboardPasteTileService extends TileService {
+
+    public static final String PREF_NAME = "tile_prefs";
+    public static final String KEY_TILE_ADDED = "tile_added";
 
     @Override
     public void onStartListening() {
@@ -20,12 +26,32 @@ public class ClipboardPasteTileService extends TileService {
         }
     }
 
-    @SuppressWarnings("deprecation")
+    @Override
+    public void onTileAdded() {
+        super.onTileAdded();
+        Log.d("ClipboardPasteTile", "磁贴已被添加");
+        saveAddedState(true);
+    }
+
+    @Override
+    public void onTileRemoved() {
+        super.onTileRemoved();
+        Log.d("ClipboardPasteTile", "磁贴已被移除");
+        saveAddedState(false);
+    }
+
+    private void saveAddedState(boolean added) {
+        SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+        prefs.edit().putBoolean(KEY_TILE_ADDED, added).apply();
+    }
+
     @Override
     public void onClick() {
         super.onClick();
         Intent intent = new Intent(this, ClipboardPasteActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivityAndCollapse(intent);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                this, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        startActivityAndCollapse(pendingIntent);
     }
 }
