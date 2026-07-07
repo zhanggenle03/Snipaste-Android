@@ -6,26 +6,22 @@ import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.qmuiteam.qmui.widget.QMUITopBarLayout;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
+import com.to3g.snipasteandroid.databinding.FragmentPermissionListBinding;
+import com.to3g.snipasteandroid.lib.AppLog;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
+import java.util.Objects;
 
 @Widget(group = Group.Other, name = "权限清单")
 public class PermissionListFragment extends BaseFragment {
 
-    @BindView(R.id.topbar)
-    QMUITopBarLayout mTopBar;
-    @BindView(R.id.permission_list_container)
-    LinearLayout mContainer;
+    private FragmentPermissionListBinding binding;
 
     private static class PermissionItem {
         final String title;
@@ -38,35 +34,37 @@ public class PermissionListFragment extends BaseFragment {
     }
 
     @Override
-    protected View onCreateView() {
-        View root = LayoutInflater.from(getContext()).inflate(R.layout.fragment_permission_list, null);
-        ButterKnife.bind(this, root);
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, android.os.Bundle savedInstanceState) {
+        binding = FragmentPermissionListBinding.inflate(inflater, container, false);
         initTopBar();
         initList();
-        return root;
+        return binding.getRoot();
     }
 
     private void initTopBar() {
-        mTopBar.addLeftBackImageButton().setOnClickListener(v -> popBackStack());
-        mTopBar.setTitle(getString(R.string.permission_list_title));
+        binding.topbar.setNavigationIcon(R.drawable.ic_arrow_back);
+        binding.topbar.setNavigationOnClickListener(v -> popBackStack());
+        binding.topbar.setTitle(getString(R.string.permission_list_title));
     }
 
     private void initList() {
         PermissionItem[] items = new PermissionItem[]{
                 new PermissionItem(getString(R.string.perm_overlay_title), getString(R.string.perm_overlay_desc)),
-                new PermissionItem(getString(R.string.perm_storage_title), getString(R.string.perm_storage_desc)),
                 new PermissionItem(getString(R.string.perm_camera_title), getString(R.string.perm_camera_desc)),
                 new PermissionItem(getString(R.string.perm_foreground_title), getString(R.string.perm_foreground_desc)),
         };
         for (PermissionItem item : items) {
-            mContainer.addView(createRow(item));
+            binding.permissionListContainer.addView(createRow(item));
         }
+        AppLog.d("PermissionList", "onCreateView");
     }
 
     private View createRow(PermissionItem item) {
-        View row = LayoutInflater.from(getContext()).inflate(R.layout.item_permission, mContainer, false);
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_permission, binding.permissionListContainer, false);
         ((TextView) row.findViewById(R.id.perm_title)).setText(item.title);
         ((TextView) row.findViewById(R.id.perm_desc)).setText(item.desc);
+        // 整行可点击打开系统设置；右侧「前往设置」文字按钮同样触发
+        row.setOnClickListener(v -> openAppSettings());
         row.findViewById(R.id.perm_action).setOnClickListener(v -> openAppSettings());
         return row;
     }
@@ -74,20 +72,10 @@ public class PermissionListFragment extends BaseFragment {
     private void openAppSettings() {
         try {
             Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-            intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+            intent.setData(Uri.parse("package:" + requireContext().getPackageName()));
             startActivity(intent);
         } catch (Exception e) {
             Toast.makeText(getContext(), getString(R.string.perm_go_settings), Toast.LENGTH_SHORT).show();
         }
-    }
-
-    @Override
-    protected boolean canDragBack() {
-        return false;
-    }
-
-    @Override
-    public Object onLastFragmentFinish() {
-        return null;
     }
 }

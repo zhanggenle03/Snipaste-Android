@@ -31,4 +31,7 @@
     <string name="about_item_homepage">go to home page</string>
     <string name="transparent">transparent</string>
     <string name="opaque">opaque</string>
+    <string name="setting_collapse_mode">Collapse form</string>
+    <string name="collapse_mode_thumb">Thumbnail</string>
+    <string name="collapse_mode_strip">Edge bar</string>
 </resources>

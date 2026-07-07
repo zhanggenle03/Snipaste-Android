@@ -4,20 +4,24 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Toast;
 
 import com.lzf.easyfloat.permission.PermissionUtils;
 import com.to3g.snipasteandroid.lib.SharePasteHelper;
 
 /**
- * 透明中转 Activity：由控制中心磁贴（或将来其它入口）启动，
- * 在前台上下文中读取剪切板文字并贴成悬浮贴图，随后立即结束自己。
- * 之所以走一个透明 Activity 而不是直接在 TileService 里读剪切板，是因为
- * Android 10+ 限制后台应用读取剪切板，必须处于前台（有焦点的 Activity）才能读取。
+ * 透明中转 Activity：由控制中心磁贴启动，在前台上下文中读取剪切板文字并贴成悬浮贴图，随后结束自己。
+ * Android 12+ 限制后台应用读取剪切板，因此必须处于前台（有焦点的 Activity）才能读取；
+ * 但磁贴拉起的活动在获得剪切板前台读取权限前有一小段窗口，读早了会返回空，所以需要多次重试。
  */
 public class ClipboardPasteActivity extends Activity {
 
-    private boolean handled = false;
+    private boolean finished = false;
+    private int attempts = 0;
+    private static final int MAX_ATTEMPTS = 12;
+    private static final long RETRY_DELAY_MS = 250;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -26,21 +30,48 @@ public class ClipboardPasteActivity extends Activity {
     }
 
     @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && !handled) {
-            handled = true;
-            handlePaste();
+    protected void onResume() {
+        super.onResume();
+        if (!finished) {
+            attemptPaste();
         }
     }
 
-    private void handlePaste() {
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // 获得焦点后立刻尝试一次，通常此刻已可读取剪切板
+        if (hasFocus && !finished) {
+            attemptPaste();
+        }
+    }
+
+    private void attemptPaste() {
+        if (finished) return;
+        attempts++;
+        String text = readClipboardText();
+        if (text != null && !text.trim().isEmpty()) {
+            finished = true;
+            doPaste(text);
+            return;
+        }
+        if (attempts < MAX_ATTEMPTS) {
+            new Handler(Looper.getMainLooper()).postDelayed(this::attemptPaste, RETRY_DELAY_MS);
+        } else {
+            finished = true;
+            Toast.makeText(this, getString(R.string.clipboardEmpty), Toast.LENGTH_SHORT).show();
+            finish();
+        }
+    }
+
+    private void doPaste(String text) {
         if (PermissionUtils.checkPermission(this)) {
-            pasteClipboard();
+            SharePasteHelper.showFloatText(this, text);
+            finish();
         } else {
             PermissionUtils.requestPermission(this, granted -> {
                 if (granted) {
-                    pasteClipboard();
+                    SharePasteHelper.showFloatText(this, text);
                 } else {
                     Toast.makeText(this, getString(R.string.needFloatingPermission), Toast.LENGTH_SHORT).show();
                 }
@@ -49,26 +80,21 @@ public class ClipboardPasteActivity extends Activity {
         }
     }
 
-    private void pasteClipboard() {
-        String text = readClipboardText();
-        if (text == null || text.trim().isEmpty()) {
-            Toast.makeText(this, getString(R.string.clipboardEmpty), Toast.LENGTH_SHORT).show();
-        } else {
-            SharePasteHelper.showFloatText(this, text);
-        }
-        finish();
-    }
-
     private String readClipboardText() {
-        ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-        if (cm == null || !cm.hasPrimaryClip()) {
+        try {
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm == null || !cm.hasPrimaryClip()) {
+                return null;
+            }
+            ClipData data = cm.getPrimaryClip();
+            if (data == null || data.getItemCount() <= 0) {
+                return null;
+            }
+            CharSequence seq = data.getItemAt(0).getText();
+            return seq == null ? null : seq.toString();
+        } catch (Exception e) {
+            // Android 10+ 后台读取剪切板会抛异常，或尚未获得前台读取权限，稍后重试
             return null;
         }
-        ClipData data = cm.getPrimaryClip();
-        if (data == null || data.getItemCount() <= 0) {
-            return null;
-        }
-        CharSequence seq = data.getItemAt(0).getText();
-        return seq == null ? null : seq.toString();
     }
 }

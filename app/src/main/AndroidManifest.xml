@@ -1,11 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="com.to3g.snipasteandroid">
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
@@ -40,7 +37,9 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".QDMainActivity">
+        <activity
+            android:name=".QDMainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -51,6 +50,11 @@
         <!-- 权限清单页 -->
         <activity
             android:name=".PermissionListActivity"
+            android:theme="@style/AppTheme" />
+
+        <!-- 错误日志查看器 -->
+        <activity
+            android:name=".LogViewerActivity"
             android:theme="@style/AppTheme" />
 
         <!-- 控制中心磁贴：长按控制中心编辑区加入，点按直接贴出剪切板文字 -->
@@ -74,6 +78,16 @@
             android:exported="false"
             android:taskAffinity=""
             android:launchMode="singleInstance" />
+        <!-- 拍照临时文件共享：TakePicture 契约需要把 App 私有 cache 目录共享给系统相机 App -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

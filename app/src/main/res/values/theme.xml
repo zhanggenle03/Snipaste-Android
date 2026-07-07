@@ -37,7 +37,7 @@
 
 
 
-    <style name="AppTheme" parent="QMUI.Compat.NoActionBar">
+    <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- 配置Android提供的theme -->
         <item name="android:textAppearanceListItemSmall">@style/QDTextAppearanceListItemSmall</item>
         <item name="android:textAppearanceListItem">@style/QDtextAppearanceListItem</item>
@@ -202,5 +202,12 @@
         <item name="app_skin_progress_bar_bg_color">@color/qmui_config_color_gray_8</item>
         <item name="app_skin_progress_bar_progress_color">@color/qmui_config_color_gray_1</item>
     </style>
+
+    <!-- 纯 AppCompat 弹窗主题：绕开 Material3 的 alertDialogTheme overlay。
+         AppTheme=Theme.Material3 会通过 alertDialogTheme 给弹窗套
+         ThemeOverlay.Material3.Dialog.Alert，其单选列表布局 select_dialog_singlechoice_material
+         引用 M2 时代的 attr(dialogPreferredPadding 等)，在 M3 overlay 下解析失败 ->
+         InflateException(CheckedTextView, vivo SDK36 实测)。用本主题包裹 Context 创建弹窗即可避免。 -->
+    <style name="AppDialogTheme" parent="Theme.AppCompat.DayNight.Dialog.Alert" />
 
 </resources>

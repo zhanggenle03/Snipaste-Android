@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 贴边条把手：收起贴图后在屏幕边缘显示的一条细条，点击恢复、可拖动。
+     真正的条尺寸与朝向（左右边=竖条 / 上下边=横条）由代码按停靠边动态设置到 stripBar 上。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <View
+        android:id="@+id/stripBar"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_handle_strip" />
+</FrameLayout>

@@ -1,19 +1,3 @@
-/*
- * Tencent is pleased to support the open source community by making QMUI_Android available.
- *
- * Copyright (C) 2017-2018 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the MIT License (the "License"); you may not use this file except in
- * compliance with the License. You may obtain a copy of the License at
- *
- * http://opensource.org/licenses/MIT
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.to3g.snipasteandroid.view;
 
 import android.annotation.SuppressLint;
@@ -21,19 +5,16 @@ import android.content.Context;
 import android.os.Build;
 import android.util.AttributeSet;
 import android.webkit.WebSettings;
+import android.webkit.WebView;
 
-import com.qmuiteam.qmui.BuildConfig;
-import com.qmuiteam.qmui.util.QMUIDisplayHelper;
-import com.qmuiteam.qmui.util.QMUIPackageHelper;
-import com.qmuiteam.qmui.util.QMUIResHelper;
-import com.qmuiteam.qmui.widget.webview.QMUIWebView;
-import com.to3g.snipasteandroid.R;
+import com.to3g.snipasteandroid.BuildConfig;
+import com.to3g.snipasteandroid.lib.PackageUtils;
+import com.to3g.snipasteandroid.lib.ScreenUtils;
 
 /**
- * Created by cgspine on 2017/12/5.
+ * 封装的 WebView（原基于 QMUIWebView，现改为标准 Android WebView）。
  */
-
-public class QDWebView extends QMUIWebView {
+public class QDWebView extends WebView {
 
     public QDWebView(Context context) {
         this(context, null);
@@ -65,10 +46,10 @@ public class QDWebView extends QMUIWebView {
             webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         }
 
-        String screen = QMUIDisplayHelper.getScreenWidth(context) + "x" + QMUIDisplayHelper.getScreenHeight(context);
-        String userAgent = "QMUIDemo/" + QMUIPackageHelper.getAppVersion(context)
+        String screen = ScreenUtils.getScreenWidth(context) + "x" + ScreenUtils.getScreenHeight(context);
+        String userAgent = "SnipasteAndroid/" + PackageUtils.getAppVersion(context)
                 + " (Android; " + Build.VERSION.SDK_INT
-                + "; Screen/" + screen + "; Scale/" + QMUIDisplayHelper.getDensity(context) + ")";
+                + "; Screen/" + screen + "; Scale/" + ScreenUtils.getDensity(context) + ")";
         String agent = getSettings().getUserAgentString();
         if (agent == null || !agent.contains(userAgent)) {
             getSettings().setUserAgentString(agent + " " + userAgent);
@@ -86,10 +67,5 @@ public class QDWebView extends QMUIWebView {
         } else {
             loadUrl(jsCode);
         }
-    }
-
-    @Override
-    protected int getExtraInsetTop(float density) {
-        return (int) (QMUIResHelper.getAttrDimen(getContext(), R.attr.qmui_topbar_height) / density);
     }
 }

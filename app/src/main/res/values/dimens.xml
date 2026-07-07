@@ -17,6 +17,7 @@
 
 <resources>
     <dimen name="home_tab_height">49dp</dimen>
+    <dimen name="topbar_height">48dp</dimen>
     <dimen name="common_content_spacing">@dimen/qmui_content_spacing_horizontal</dimen>
 
     <!-- ListView -->

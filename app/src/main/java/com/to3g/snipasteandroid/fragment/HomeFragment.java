@@ -1,10 +1,13 @@
 package com.to3g.snipasteandroid.fragment;
 
 import android.content.Context;
-import android.content.Intent;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
+import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Size;
@@ -15,26 +18,19 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.content.FileProvider;
+import androidx.core.content.ContextCompat;
 
-import com.luck.picture.lib.PictureSelector;
-import com.luck.picture.lib.config.PictureConfig;
-import com.luck.picture.lib.config.PictureMimeType;
-import com.luck.picture.lib.entity.LocalMedia;
 import com.lzf.easyfloat.EasyFloat;
 import com.lzf.easyfloat.enums.ShowPattern;
 import com.lzf.easyfloat.interfaces.OnFloatCallbacks;
 import com.lzf.easyfloat.permission.PermissionUtils;
-import com.qmuiteam.qmui.arch.annotation.LatestVisitRecord;
-import com.qmuiteam.qmui.widget.QMUITopBarLayout;
-import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
-import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
-import com.qmuiteam.qmui.widget.roundwidget.QMUIRoundButton;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
+import com.to3g.snipasteandroid.databinding.HomeLayoutBinding;
 import com.to3g.snipasteandroid.lib.ClipBoardUtil;
-import com.to3g.snipasteandroid.lib.GlideEngine;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.ImageUtil;
 import com.to3g.snipasteandroid.lib.SharePasteHelper;
@@ -42,162 +38,158 @@ import com.to3g.snipasteandroid.lib.TextBitmapUtil;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 import com.to3g.snipasteandroid.view.ScaleImage;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.OnClick;
-
-@LatestVisitRecord
 @Widget(group = Group.Other, name = "Home")
 public class HomeFragment extends BaseFragment {
 
     private static final String TAG = "HomeFragment";
 
-    @BindView(R.id.editText)
-    EditText editText;
-
-    @BindView(R.id.pasteTextButton)
-    QMUIRoundButton pasteTextButton;
-
-    @BindView(R.id.pasteClipboardButton)
-    QMUIRoundButton pasteClipboardButton;
-
-    @BindView(R.id.topbar)
-    QMUITopBarLayout mTopBar;
-
-    @BindView(R.id.albumButton)
-    QMUIRoundButton albumButton;
-
-    @BindView(R.id.cameraButton)
-    QMUIRoundButton cameraButton;
-
+    private HomeLayoutBinding binding;
     private List<String> floatingImages = new ArrayList<>();
 
+    /** 拍照临时文件：TakePicture 契约需要一个可写的 Uri */
+    private File cameraTempFile;
+
+    /** 选图（GetContent）：返回 content:// Uri */
+    private final ActivityResultLauncher<String> albumLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), this::onAlbumResult);
+
+    /** 拍照（TakePicture）：需要一个可写的 Uri */
+    private final ActivityResultLauncher<Uri> cameraLauncher =
+            registerForActivityResult(new ActivityResultContracts.TakePicture(), this::onCameraResult);
+
+    /** 相机权限请求：授权后启动拍照，拒绝时只提示、不崩溃 */
+    private final ActivityResultLauncher<String> cameraPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                if (Boolean.TRUE.equals(granted)) {
+                    launchCamera();
+                } else if (getContext() != null) {
+                    Toast.makeText(getContext(), R.string.camera_permission_denied, Toast.LENGTH_SHORT).show();
+                }
+            });
 
     @Override
-    protected View onCreateView() {
-        // bind view
-        View root = LayoutInflater.from(getContext()).inflate(R.layout.home_layout, null);
-        ButterKnife.bind(this, root);
-        // init the top bar
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        binding = HomeLayoutBinding.inflate(inflater, container, false);
         initTopBar();
-
-        return root;
-    }
-
-    private void pasteCamera () {
-        PictureSelector
-                .create(getActivity())
-                .openCamera(PictureMimeType.ofImage())
-                .loadImageEngine(GlideEngine.createGlideEngine())
-                .enableCrop(true)
-                .freeStyleCropEnabled(true)
-                .forResult(result -> {
-                    if (result.size() > 0) {
-                        LocalMedia localMedia = result.get(0);
-                        String path = localMedia.getCutPath();
-                        Log.d(TAG, "onResult: " + path);
-                        File file = new File(path);
-                        if (file.exists()) {
-                            initImageView(path);
-                        }
-                    }
-                });
+        binding.pasteTextButton.setOnClickListener(v -> onPasteTextButtonClick());
+        binding.pasteClipboardButton.setOnClickListener(v -> onPasteClickboardButtonClick());
+        binding.albumButton.setOnClickListener(v -> onAlbumButtonClick());
+        binding.cameraButton.setOnClickListener(v -> onCameraButtonClick());
+        return binding.getRoot();
     }
 
     /**
-     * When click the camera button
+     * 点击相机按钮：先要悬浮窗权限，再确认相机权限，最后打开系统相机。
+     * 使用系统原生 TakePicture 契约，照片写入 App 私有 cache 目录，无需存储权限。
      */
-    @OnClick(R.id.cameraButton)
-    protected void onCameraButtonClick () {
-        // check the permission
-        if (PermissionUtils.checkPermission(Objects.requireNonNull(getContext()))) {
-            pasteCamera();
+    protected void onCameraButtonClick() {
+        ensureFloatPermissionThen(this::ensureCameraPermissionThenLaunch);
+    }
+
+    /**
+     * 打开相机前确认 CAMERA 权限。未授予则弹系统授权框；被拒绝时只提示、不崩溃。
+     * 注意：即使使用系统 TakePicture 契约，声明了 CAMERA 权限的 App 在较新 Android 上
+     * 仍需运行时获得该权限，否则启动相机 Intent 会抛 SecurityException 导致闪退。
+     */
+    private void ensureCameraPermissionThenLaunch() {
+        Context context = getContext();
+        if (context == null) {
+            return;
+        }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED) {
+            launchCamera();
         } else {
-            // prompt to request permission
-            new QMUIDialog.MessageDialogBuilder(getActivity())
-                    .setMessage(getText(R.string.floatingPermissionText))
-                    .addAction(getText(R.string.cancelText), new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                        }
-                    })
-                    .addAction(0, getText(R.string.toOpen), QMUIDialogAction.ACTION_PROP_POSITIVE, new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                            PermissionUtils.requestPermission(getActivity(), result -> {
-                                if(result) {
-                                    pasteCamera();
-                                } else {
-                                    Toast.makeText(getContext(), getText(R.string.needFloatingPermission), Toast.LENGTH_SHORT).show();
-                                }
-                            });
-                        }
-                    })
-                    .create(R.style.QMUI_Dialog).show();
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
         }
     }
 
-    private void pasteAlbum () {
-        PictureSelector
-                .create(getActivity())
-                .openGallery(PictureMimeType.ofImage())
-                .loadImageEngine(GlideEngine.createGlideEngine())
-                .enableCrop(true)
-                .freeStyleCropEnabled(true)
-                .selectionMode(PictureConfig.SINGLE)
-                .isSingleDirectReturn(true)
-                .forResult(result -> {
-                    if (result.size() > 0) {
-                        LocalMedia localMedia = result.get(0);
-                        String path = localMedia.getCutPath();
-                        Log.d(TAG, "onResult: " + path);
-                        File file = new File(path);
-                        if (file.exists()) {
-                            initImageView(path);
-                        }
-                    }
-                });
+    private void launchCamera() {
+        Context context = getContext();
+        if (context == null) {
+            return;
+        }
+        File dir = context.getExternalCacheDir();
+        if (dir == null) {
+            Toast.makeText(context, R.string.file_access_failed, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        cameraTempFile = new File(dir, "snipaste_camera_" + System.currentTimeMillis() + ".jpg");
+        Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", cameraTempFile);
+        cameraLauncher.launch(uri);
+    }
+
+    private void onCameraResult(Boolean success) {
+        if (Boolean.TRUE.equals(success) && cameraTempFile != null && cameraTempFile.exists()) {
+            Log.d(TAG, "onCameraResult: " + cameraTempFile.getAbsolutePath());
+            initImageView(cameraTempFile.getAbsolutePath());
+        }
+        cameraTempFile = null;
     }
 
     /**
-     * When click the album button
+     * 点击相册按钮：先要悬浮窗权限，再打开系统/原生照片选择器。
+     * 使用系统原生 GetContent，Android 13+ 走 Photo Picker，无需存储权限。
      */
-    @OnClick(R.id.albumButton)
-    protected void onAlbumButtonClick () {
-        // check the permission
-        if (PermissionUtils.checkPermission(Objects.requireNonNull(getContext()))) {
-            pasteAlbum();
-        } else {
-            // prompt to request permission
-            new QMUIDialog.MessageDialogBuilder(getActivity())
-                    .setMessage(getText(R.string.floatingPermissionText))
-                    .addAction(getText(R.string.cancelText), new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                        }
-                    })
-                    .addAction(0, getText(R.string.toOpen), QMUIDialogAction.ACTION_PROP_POSITIVE, new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                            PermissionUtils.requestPermission(getActivity(), result -> {
-                                if(result) {
-                                    pasteAlbum();
-                                } else {
-                                    Toast.makeText(getContext(), getText(R.string.needFloatingPermission), Toast.LENGTH_SHORT).show();
-                                }
-                            });
-                        }
-                    })
-                    .create(R.style.QMUI_Dialog).show();
+    protected void onAlbumButtonClick() {
+        ensureFloatPermissionThen(this::launchAlbum);
+    }
+
+    private void launchAlbum() {
+        albumLauncher.launch("image/*");
+    }
+
+    private void onAlbumResult(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        Log.d(TAG, "onAlbumResult: " + uri);
+        String path = copyUriToTempFile(uri);
+        if (path != null) {
+            initImageView(path);
+        } else if (getContext() != null) {
+            Toast.makeText(getContext(), R.string.file_access_failed, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 把系统返回的 content:// Uri 拷贝到 App 私有 cache 目录，得到真实文件路径，
+     * 以便复用现有的 initImageView(String path) 流程（ImageUtil 取尺寸 + Drawable.createFromPath）。
+     */
+    private String copyUriToTempFile(Uri uri) {
+        Context context = getContext();
+        if (context == null) {
+            return null;
+        }
+        File dir = context.getExternalCacheDir();
+        if (dir == null) {
+            return null;
+        }
+        File out = new File(dir, "snipaste_album_" + System.currentTimeMillis() + ".jpg");
+        try (InputStream is = context.getContentResolver().openInputStream(uri);
+             FileOutputStream os = new FileOutputStream(out)) {
+            if (is == null) {
+                return null;
+            }
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = is.read(buf)) > 0) {
+                os.write(buf, 0, len);
+            }
+            return out.getAbsolutePath();
+        } catch (IOException e) {
+            Log.e(TAG, "copyUriToTempFile failed", e);
+            return null;
         }
     }
 
@@ -206,24 +198,11 @@ public class HomeFragment extends BaseFragment {
         super.onDestroy();
     }
 
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        Log.d(TAG, "onActivityResult: ");
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-    }
-
-    private ViewGroup.LayoutParams getDefaultParams (String path, ViewGroup.LayoutParams layoutParams) {
-
+    private ViewGroup.LayoutParams getDefaultParams(String path, ViewGroup.LayoutParams layoutParams) {
         DisplayMetrics displayMetrics = new DisplayMetrics();
         getActivity().getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
         int screenWidth = displayMetrics.widthPixels;
 
-        // 获取图片宽高
         Size size = ImageUtil.getImageSize(path);
         int imgWidth = size.getWidth();
         int imgHeight = size.getHeight();
@@ -237,13 +216,11 @@ public class HomeFragment extends BaseFragment {
         return layoutParams;
     }
 
-    private ViewGroup.LayoutParams getDefaultParams (Bitmap bitmap, ViewGroup.LayoutParams layoutParams) {
-
+    private ViewGroup.LayoutParams getDefaultParams(Bitmap bitmap, ViewGroup.LayoutParams layoutParams) {
         DisplayMetrics displayMetrics = new DisplayMetrics();
         getActivity().getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
         int screenWidth = displayMetrics.widthPixels;
 
-        // 获取图片宽高
         int imgWidth = bitmap.getWidth();
         int imgHeight = bitmap.getHeight();
         Log.d(TAG, String.format("initImageView: image size：%d, %d", imgWidth, imgHeight));
@@ -265,17 +242,19 @@ public class HomeFragment extends BaseFragment {
                 .setTag(path)
                 .registerCallbacks(new OnFloatCallbacks() {
                     @Override
-                    public void createdResult(boolean isCreated, String msg, View view) { }
+                    public void createdResult(boolean isCreated, String msg, View view) {
+                    }
 
                     @Override
-                    public void show(View view) { }
+                    public void show(View view) {
+                    }
 
                     @Override
-                    public void hide(View view) { }
+                    public void hide(View view) {
+                    }
 
                     @Override
                     public void dismiss() {
-                        // 贴图浮窗被销毁时，务必带走其透明度滑块，避免残留
                         SharePasteHelper.dismissOpacitySlider(path);
                         floatingImages.remove(path);
                     }
@@ -319,11 +298,8 @@ public class HomeFragment extends BaseFragment {
 
             @Override
             public void onScaleChange(float scaleFactor, float focusX, float focusY) {
-
             }
         };
-        // 透明度滑块仍由浮窗 touchEvent -> SharePasteHelper.handleFloatTouch 双击触发。
-        // 关闭贴图改为：拖出屏幕边缘 -> 底部弹出「收起/关闭」选择（见 SharePasteHelper.onStickerDragEnd）。
         SharePasteHelper.attachOpacitySlider(getActivity(), path, imageOutterShadow);
     }
 
@@ -333,10 +309,6 @@ public class HomeFragment extends BaseFragment {
         showImageFloatByBitmap("bitmap", bitmap, lp.width, lp.height);
     }
 
-    /**
-     * 以图片贴图方式展示一张 Bitmap（截图、文字转图等共用此路径）。
-     * 文字贴图先把文字渲染成 Bitmap，再走这里，从而复用图片贴图流畅的缩放体验。
-     */
     private void showImageFloatByBitmap(String tagName, Bitmap bitmap, int initWidth, int initHeight) {
         EasyFloat
                 .with(Objects.requireNonNull(getActivity()))
@@ -346,17 +318,19 @@ public class HomeFragment extends BaseFragment {
                 .setTag(tagName)
                 .registerCallbacks(new OnFloatCallbacks() {
                     @Override
-                    public void createdResult(boolean isCreated, String msg, View view) { }
+                    public void createdResult(boolean isCreated, String msg, View view) {
+                    }
 
                     @Override
-                    public void show(View view) { }
+                    public void show(View view) {
+                    }
 
                     @Override
-                    public void hide(View view) { }
+                    public void hide(View view) {
+                    }
 
                     @Override
                     public void dismiss() {
-                        // 贴图浮窗被销毁时，务必带走其透明度滑块，避免残留
                         SharePasteHelper.dismissOpacitySlider(tagName);
                         floatingImages.remove(tagName);
                     }
@@ -402,87 +376,71 @@ public class HomeFragment extends BaseFragment {
 
             @Override
             public void onScaleChange(float scaleFactor, float focusX, float focusY) {
-
             }
         };
-        // 透明度滑块仍由浮窗 touchEvent -> SharePasteHelper.handleFloatTouch 双击触发。
-        // 关闭贴图改为：拖出屏幕边缘 -> 底部弹出「收起/关闭」选择（见 SharePasteHelper.onStickerDragEnd）。
         SharePasteHelper.attachOpacitySlider(getActivity(), tagName, imageOutterShadow);
     }
 
-    @OnClick(R.id.pasteTextButton)
-    protected void onPasteTextButtonClick () {
-        floatText(editText.getText().toString());
+    protected void onPasteTextButtonClick() {
+        floatText(binding.editText.getText().toString());
     }
 
-    @OnClick(R.id.pasteClipboardButton)
-    protected void onPasteClickboardButtonClick () {
+    protected void onPasteClickboardButtonClick() {
         String content = ClipBoardUtil.get(Objects.requireNonNull(getContext()));
         Log.d(TAG, "clipboard content: " + content);
-        editText.setText(content);
+        binding.editText.setText(content);
         floatText(content);
     }
 
-    private void showFloatText (String content) {
+    private void showFloatText(String content) {
         if (content == null || content.trim().isEmpty()) {
             Toast.makeText(getContext(), getText(R.string.blankContent), Toast.LENGTH_SHORT).show();
             return;
         }
-        // 相同内容视为同一个贴图，避免重复创建
         String tag = "text_" + content.hashCode();
         if (EasyFloat.getAppFloatView(tag) != null) {
             Toast.makeText(getContext(), getText(R.string.textFloated), Toast.LENGTH_SHORT).show();
             return;
         }
-        // 将文字渲染为图片，复用图片贴图路径：缩放更流畅、无文字重排抖动、无多余空白
         Bitmap textBitmap = TextBitmapUtil.create(getContext(), content);
         showImageFloatByBitmap(tag, textBitmap, textBitmap.getWidth(), textBitmap.getHeight());
     }
 
     private void floatText(String content) {
-        // check the permission
+        ensureFloatPermissionThen(() -> showFloatText(content));
+    }
+
+    private void ensureFloatPermissionThen(Runnable action) {
         if (PermissionUtils.checkPermission(Objects.requireNonNull(getContext()))) {
-            showFloatText(content);
+            action.run();
         } else {
-            // prompt to request permission
-            new QMUIDialog.MessageDialogBuilder(getActivity())
+            new MaterialAlertDialogBuilder(requireContext())
                     .setMessage(getText(R.string.floatingPermissionText))
-                    .addAction(getText(R.string.cancelText), new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                        }
+                    .setNegativeButton(R.string.cancelText, (d, i) -> d.dismiss())
+                    .setPositiveButton(R.string.toOpen, (d, i) -> {
+                        d.dismiss();
+                        PermissionUtils.requestPermission(getActivity(), result -> {
+                            if (result) {
+                                action.run();
+                            } else {
+                                Toast.makeText(getContext(), getText(R.string.needFloatingPermission), Toast.LENGTH_SHORT).show();
+                            }
+                        });
                     })
-                    .addAction(0, getText(R.string.toOpen), QMUIDialogAction.ACTION_PROP_POSITIVE, new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                            PermissionUtils.requestPermission(getActivity(), result -> {
-                                if(result) {
-                                    showFloatText(content);
-                                } else {
-                                    Toast.makeText(getContext(), getText(R.string.needFloatingPermission), Toast.LENGTH_SHORT).show();
-                                }
-                            });
-                        }
-                    })
-                    .create(R.style.QMUI_Dialog).show();
+                    .show();
         }
     }
 
     private void initTopBar() {
-        mTopBar.setTitle(getString(R.string.app_name));
-        mTopBar.addRightImageButton(R.mipmap.icon_topbar_overflow, R.id.topbar_right_change_button)
-                .setOnClickListener(v -> {
-                   clearAllFloatViews();
-                });
+        binding.topbar.setTitle(getString(R.string.app_name));
+        binding.topbarRightChangeButton.setOnClickListener(v -> clearAllFloatViews());
     }
 
     /**
      * 清空所有浮窗（本 Fragment 与 SharePasteHelper 创建的）
      */
-    private void clearAllFloatViews () {
-        for (String path : floatingImages) {
+    private void clearAllFloatViews() {
+        for (String path : new ArrayList<>(floatingImages)) {
             SharePasteHelper.closeSticker(path);
         }
         floatingImages.clear();
@@ -490,15 +448,5 @@ public class HomeFragment extends BaseFragment {
             SharePasteHelper.closeSticker(tag);
         }
         SharePasteHelper.getHelperImageTags().clear();
-    }
-
-    @Override
-    public Object onLastFragmentFinish() {
-        return null;
-    }
-
-    @Override
-    protected boolean canDragBack(Context context, int dragDirection, int moveEdge) {
-        return false;
     }
 }
