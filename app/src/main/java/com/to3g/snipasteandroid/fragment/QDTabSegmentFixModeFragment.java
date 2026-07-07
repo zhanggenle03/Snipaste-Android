@@ -1,22 +1,8 @@
-/*
- * Tencent is pleased to support the open source community by making QMUI_Android available.
- *
- * Copyright (C) 2017-2018 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the MIT License (the "License"); you may not use this file except in
- * compliance with the License. You may obtain a copy of the License at
- *
- * http://opensource.org/licenses/MIT
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.to3g.snipasteandroid.fragment;
 
 import android.content.Context;
+import android.os.Bundle;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -26,43 +12,22 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.core.content.ContextCompat;
+import androidx.fragment.app.Fragment;
 import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
-import com.qmuiteam.qmui.arch.annotation.LatestVisitRecord;
-import com.qmuiteam.qmui.util.QMUIDisplayHelper;
-import com.qmuiteam.qmui.widget.QMUITopBarLayout;
-import com.qmuiteam.qmui.widget.dialog.QMUIBottomSheet;
-import com.qmuiteam.qmui.widget.tab.QMUITab;
-import com.qmuiteam.qmui.widget.tab.QMUITabBuilder;
-import com.qmuiteam.qmui.widget.tab.QMUITabIndicator;
-import com.qmuiteam.qmui.widget.tab.QMUITabSegment;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
+import com.to3g.snipasteandroid.databinding.FragmentTabViewpagerLayoutBinding;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 
 import java.util.HashMap;
 import java.util.Map;
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
-
-/**
- * @author cginechen
- * @date 2017-04-28
- */
-
-@LatestVisitRecord
 @Widget(group = Group.Other, name = "固定宽度，内容均分")
 public class QDTabSegmentFixModeFragment extends BaseFragment {
-    @BindView(R.id.topbar)
-    QMUITopBarLayout mTopBar;
-    @BindView(R.id.tabSegment)
-    QMUITabSegment mTabSegment;
-    @BindView(R.id.contentViewPager)
-    ViewPager mContentViewPager;
-
+    private FragmentTabViewpagerLayoutBinding binding;
     private Map<ContentPage, View> mPageMap = new HashMap<>();
     private ContentPage mDestPage = ContentPage.Item1;
     private PagerAdapter mPagerAdapter = new PagerAdapter() {
@@ -91,75 +56,42 @@ public class QDTabSegmentFixModeFragment extends BaseFragment {
             container.removeView((View) object);
         }
 
+        @Override
+        public CharSequence getPageTitle(int position) {
+            ContentPage page = ContentPage.getPage(position);
+            return page == ContentPage.Item1
+                    ? getString(R.string.tabSegment_item_1_title)
+                    : getString(R.string.tabSegment_item_2_title);
+        }
     };
 
     @Override
-    protected View onCreateView() {
-        View rootView = LayoutInflater.from(getActivity()).inflate(R.layout.fragment_tab_viewpager_layout, null);
-        ButterKnife.bind(this, rootView);
-
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        binding = FragmentTabViewpagerLayoutBinding.inflate(inflater, container, false);
         initTopBar();
         initTabAndPager();
-
-        return rootView;
+        return binding.getRoot();
     }
 
     private void initTopBar() {
-//        mTopBar.addLeftBackImageButton().setOnClickListener(new View.OnClickListener() {
-//            @Override
-//            public void onClick(View v) {
-//                popBackStack();
-//            }
-//        });
-
-        mTopBar.setTitle(getString(R.string.app_name));
-        mTopBar.addRightImageButton(R.mipmap.icon_topbar_overflow, R.id.topbar_right_change_button)
-                .setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        Toast.makeText(getContext(), "点击干嘛", Toast.LENGTH_SHORT).show();
-                    }
-                });
+        binding.topbar.setTitle(getString(R.string.app_name));
+        binding.topbarRightChangeButton.setOnClickListener(v ->
+                Toast.makeText(getContext(), "点击干嘛", Toast.LENGTH_SHORT).show());
     }
 
-
     private void initTabAndPager() {
-        mContentViewPager.setAdapter(mPagerAdapter);
-        mContentViewPager.setCurrentItem(mDestPage.getPosition(), false);
-        QMUITabBuilder builder = mTabSegment.tabBuilder();
-        mTabSegment.addTab(builder.setText(getString(R.string.tabSegment_item_1_title)).build(getContext()));
-        mTabSegment.addTab(builder.setText(getString(R.string.tabSegment_item_2_title)).build(getContext()));
-        mTabSegment.setupWithViewPager(mContentViewPager, false);
-        mTabSegment.setMode(QMUITabSegment.MODE_FIXED);
-        mTabSegment.addOnTabSelectedListener(new QMUITabSegment.OnTabSelectedListener() {
-            @Override
-            public void onTabSelected(int index) {
-
-            }
-
-            @Override
-            public void onTabUnselected(int index) {
-
-            }
-
-            @Override
-            public void onTabReselected(int index) {
-            }
-
-            @Override
-            public void onDoubleTap(int index) {
-                mTabSegment.clearSignCountView(index);
-            }
-        });
+        binding.contentViewPager.setAdapter(mPagerAdapter);
+        binding.contentViewPager.setCurrentItem(mDestPage.getPosition(), false);
+        binding.tabSegment.setupWithViewPager(binding.contentViewPager);
     }
 
     private View getPageView(ContentPage page) {
         View view = mPageMap.get(page);
         if (view == null) {
-            TextView textView = new TextView(getContext());
+            TextView textView = new TextView(requireContext());
             textView.setGravity(Gravity.CENTER);
             textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
-            textView.setTextColor(ContextCompat.getColor(getContext(), R.color.app_color_description));
+            textView.setTextColor(ContextCompat.getColor(requireContext(), R.color.app_color_description));
 
             if (page == ContentPage.Item1) {
                 textView.setText(R.string.tabSegment_item_1_content);
@@ -197,19 +129,5 @@ public class QDTabSegmentFixModeFragment extends BaseFragment {
         public int getPosition() {
             return position;
         }
-    }
-
-    @Override
-    protected boolean canDragBack() {
-        return false;
-    }
-
-    /**
-     * 这个方法返回 null，可以终止无限循环，从而返回键可以返回桌面.
-     * @return null
-     */
-    @Override
-    public Object onLastFragmentFinish() {
-        return null;
     }
 }

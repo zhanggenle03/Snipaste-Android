@@ -47,6 +47,17 @@ public abstract class BaseFragment extends Fragment {
         return null;
     }
 
+    /**
+     * 兼容方法：原 QMUI 侧滑返回判定。决策 #4 已移除侧滑返回，这里固定返回 false。
+     */
+    protected boolean canDragBack() {
+        return false;
+    }
+
+    protected boolean canDragBack(android.content.Context context, int dragDirection, int moveEdge) {
+        return false;
+    }
+
     protected void goToWebExplorer(@NonNull String url, @Nullable String title) {
         Bundle args = new Bundle();
         args.putString(QDWebExplorerFragment.EXTRA_URL, url);

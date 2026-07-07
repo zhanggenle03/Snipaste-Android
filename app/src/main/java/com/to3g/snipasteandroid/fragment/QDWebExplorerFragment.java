@@ -1,19 +1,3 @@
-/*
- * Tencent is pleased to support the open source community by making QMUI_Android available.
- *
- * Copyright (C) 2017-2018 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the MIT License (the "License"); you may not use this file except in
- * compliance with the License. You may obtain a copy of the License at
- *
- * http://opensource.org/licenses/MIT
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.to3g.snipasteandroid.fragment;
 
 import android.animation.Animator;
@@ -28,33 +12,25 @@ import android.view.View;
 import android.webkit.DownloadListener;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-import android.widget.ProgressBar;
-import android.widget.ZoomButtonsController;
 
-import com.qmuiteam.qmui.util.QMUILangHelper;
-import com.qmuiteam.qmui.util.QMUIResHelper;
-import com.qmuiteam.qmui.widget.QMUITopBarLayout;
-import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
-import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
-import com.qmuiteam.qmui.widget.webview.QMUIWebView;
-import com.qmuiteam.qmui.widget.webview.QMUIWebViewClient;
-import com.qmuiteam.qmui.widget.webview.QMUIWebViewContainer;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
+import com.to3g.snipasteandroid.databinding.FragmentWebviewExplorerBinding;
+import com.to3g.snipasteandroid.lib.ScreenUtils;
 import com.to3g.snipasteandroid.view.QDWebView;
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Field;
 import java.net.URLDecoder;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
+import java.text.TextUtils;
 
 /**
- * Created by cgspine on 2017/12/4.
+ * 内嵌 WebView 浏览器（原基于 QMUIWebView，现改用标准 WebView）。
  */
-
 public class QDWebExplorerFragment extends BaseFragment {
     public static final String EXTRA_URL = "EXTRA_URL";
     public static final String EXTRA_TITLE = "EXTRA_TITLE";
@@ -63,13 +39,8 @@ public class QDWebExplorerFragment extends BaseFragment {
     private final static int PROGRESS_PROCESS = 0;
     private final static int PROGRESS_GONE = 1;
 
-
-    @BindView(R.id.topbar) protected QMUITopBarLayout mTopBarLayout;
-    @BindView(R.id.webview_container)
-    QMUIWebViewContainer mWebViewContainer;
-    @BindView(R.id.progress_bar) ProgressBar mProgressBar;
-    protected QDWebView mWebView;
-
+    private FragmentWebviewExplorerBinding binding;
+    private QDWebView mWebView;
 
     private String mUrl;
     private String mTitle;
@@ -78,7 +49,7 @@ public class QDWebExplorerFragment extends BaseFragment {
     private boolean mNeedDecodeUrl = false;
 
     @Override
-    protected View onCreateView() {
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         Bundle bundle = getArguments();
         if (bundle != null) {
             String url = bundle.getString(EXTRA_URL);
@@ -91,48 +62,34 @@ public class QDWebExplorerFragment extends BaseFragment {
 
         mProgressHandler = new ProgressHandler();
 
-        View view = LayoutInflater.from(getContext()).inflate(R.layout.fragment_webview_explorer, null);
-        ButterKnife.bind(this, view);
+        binding = FragmentWebviewExplorerBinding.inflate(inflater, container, false);
         initTopbar();
         initWebView();
-        return view;
+        return binding.getRoot();
     }
 
     protected void initTopbar() {
-        mTopBarLayout.addLeftBackImageButton().setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                popBackStack();
-            }
-        });
+        binding.topbar.setNavigationIcon(R.drawable.ic_arrow_back);
+        binding.topbar.setNavigationOnClickListener(v -> popBackStack());
         updateTitle(mTitle);
     }
 
     private void updateTitle(String title) {
-        if (title != null && !title.equals("")) {
+        if (!TextUtils.isEmpty(title)) {
             mTitle = title;
-            mTopBarLayout.setTitle(mTitle);
+            binding.topbar.setTitle(mTitle);
         }
     }
 
-    protected boolean needDispatchSafeAreaInset() {
-        return false;
-    }
-
     protected void initWebView() {
-        mWebView = new QDWebView(getContext());
-        boolean needDispatchSafeAreaInset = needDispatchSafeAreaInset();
-        mWebViewContainer.addWebView(mWebView, needDispatchSafeAreaInset);
-        mWebViewContainer.setCustomOnScrollChangeListener(new QMUIWebView.OnScrollChangeListener() {
-            @Override
-            public void onScrollChange(WebView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
-                onScrollWebContent(scrollX, scrollY, oldScrollX, oldScrollY);
-            }
-        });
-        FrameLayout.LayoutParams containerLp = (FrameLayout.LayoutParams) mWebViewContainer.getLayoutParams();
-        mWebViewContainer.setFitsSystemWindows(!needDispatchSafeAreaInset);
-        containerLp.topMargin = needDispatchSafeAreaInset ? 0 : QMUIResHelper.getAttrDimen(getContext(), R.attr.qmui_topbar_height);
-        mWebViewContainer.setLayoutParams(containerLp);
+        mWebView = new QDWebView(requireContext());
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
+        binding.webviewContainer.addView(mWebView, lp);
+        binding.webviewContainer.setFitsSystemWindows(false);
+        FrameLayout.LayoutParams containerLp = (FrameLayout.LayoutParams) binding.webviewContainer.getLayoutParams();
+        containerLp.topMargin = ScreenUtils.dp2px(requireContext(), 48);
+        binding.webviewContainer.setLayoutParams(containerLp);
 
         mWebView.setDownloadListener(new DownloadListener() {
             @Override
@@ -140,22 +97,16 @@ public class QDWebExplorerFragment extends BaseFragment {
                 boolean needConfirm = !url.startsWith("http://qmuiteam.com") && !url.startsWith("https://qmuiteam.com");
                 if (needConfirm) {
                     final String finalURL = url;
-                    new QMUIDialog.MessageDialogBuilder(getContext())
+                    new MaterialAlertDialogBuilder(requireContext())
                             .setMessage("确认下载此文件？")
-                            .addAction(R.string.cancel, new QMUIDialogAction.ActionListener() {
-                                @Override
-                                public void onClick(QMUIDialog dialog, int index) {
-                                    dialog.dismiss();
-                                    popBackStack();
-                                }
+                            .setNegativeButton(R.string.cancel, (d, i) -> {
+                                d.dismiss();
+                                popBackStack();
                             })
-                            .addAction(R.string.ok, new QMUIDialogAction.ActionListener() {
-                                @Override
-                                public void onClick(QMUIDialog dialog, int index) {
-                                    dialog.dismiss();
-                                    doDownload(finalURL);
-                                    popBackStack();
-                                }
+                            .setPositiveButton(R.string.ok, (d, i) -> {
+                                d.dismiss();
+                                doDownload(finalURL);
+                                popBackStack();
                             })
                             .show();
                 } else {
@@ -164,7 +115,6 @@ public class QDWebExplorerFragment extends BaseFragment {
             }
 
             private void doDownload(String url) {
-
             }
         });
 
@@ -172,38 +122,19 @@ public class QDWebExplorerFragment extends BaseFragment {
         mWebView.setWebViewClient(getWebViewClient());
         mWebView.requestFocus(View.FOCUS_DOWN);
         setZoomControlGone(mWebView);
-        configWebView(mWebViewContainer, mWebView);
+        configWebView(binding.webviewContainer, mWebView);
         mWebView.loadUrl(mUrl);
     }
 
-    protected void configWebView(QMUIWebViewContainer webViewContainer, QMUIWebView webView) {
-
-    }
-
-    protected void onScrollWebContent(int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
-
-    }
-
-    private void handleUrl(String url) {
-        if (mNeedDecodeUrl) {
-            String decodeURL;
-            try {
-                decodeURL = URLDecoder.decode(url, "utf-8");
-            } catch (UnsupportedEncodingException ignored) {
-                decodeURL = url;
-            }
-            mUrl = decodeURL;
-        } else {
-            mUrl = url;
-        }
+    protected void configWebView(FrameLayout webViewContainer, WebView webView) {
     }
 
     protected WebChromeClient getWebViewChromeClient() {
         return new ExplorerWebViewChromeClient(this);
     }
 
-    protected QMUIWebViewClient getWebViewClient() {
-        return new ExplorerWebViewClient(needDispatchSafeAreaInset());
+    protected WebViewClient getWebViewClient() {
+        return new ExplorerWebViewClient();
     }
 
     private void sendProgressMessage(int progressType, int newProgress, int duration) {
@@ -217,21 +148,20 @@ public class QDWebExplorerFragment extends BaseFragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        mWebViewContainer.destroy();
-        mWebView = null;
+        if (mWebView != null) {
+            mWebView.destroy();
+        }
     }
 
     public static void setZoomControlGone(WebView webView) {
         webView.getSettings().setDisplayZoomControls(false);
-        @SuppressWarnings("rawtypes")
-        Class classType;
+        Class<?> classType;
         Field field;
         try {
             classType = WebView.class;
             field = classType.getDeclaredField("mZoomButtonsController");
             field.setAccessible(true);
-            ZoomButtonsController zoomButtonsController = new ZoomButtonsController(
-                    webView);
+            android.webkit.ZoomButtonsController zoomButtonsController = new android.webkit.ZoomButtonsController(webView);
             zoomButtonsController.getZoomControls().setVisibility(View.GONE);
             try {
                 field.set(webView, zoomButtonsController);
@@ -253,7 +183,6 @@ public class QDWebExplorerFragment extends BaseFragment {
         @Override
         public void onProgressChanged(WebView view, int newProgress) {
             super.onProgressChanged(view, newProgress);
-            // 修改进度条
             if (newProgress > mFragment.mProgressHandler.mDstProgressIndex) {
                 mFragment.sendProgressMessage(PROGRESS_PROCESS, newProgress, 100);
             }
@@ -272,20 +201,15 @@ public class QDWebExplorerFragment extends BaseFragment {
 
         @Override
         public void onHideCustomView() {
-
         }
     }
 
-    protected class ExplorerWebViewClient extends QMUIWebViewClient {
-
-        public ExplorerWebViewClient(boolean needDispatchSafeAreaInset) {
-            super(needDispatchSafeAreaInset, true);
-        }
+    protected class ExplorerWebViewClient extends WebViewClient {
 
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             super.onPageStarted(view, url, favicon);
-            if (QMUILangHelper.isNullOrEmpty(mTitle)) {
+            if (TextUtils.isEmpty(mTitle)) {
                 updateTitle(view.getTitle());
             }
             if (mProgressHandler.mDstProgressIndex == 0) {
@@ -297,7 +221,7 @@ public class QDWebExplorerFragment extends BaseFragment {
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
             sendProgressMessage(PROGRESS_GONE, 100, 0);
-            if (QMUILangHelper.isNullOrEmpty(mTitle)) {
+            if (TextUtils.isEmpty(mTitle)) {
                 updateTitle(view.getTitle());
             }
         }
@@ -309,7 +233,6 @@ public class QDWebExplorerFragment extends BaseFragment {
         private int mDuration;
         private ObjectAnimator mAnimator;
 
-
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
@@ -317,16 +240,16 @@ public class QDWebExplorerFragment extends BaseFragment {
                     mIsPageFinished = false;
                     mDstProgressIndex = msg.arg1;
                     mDuration = msg.arg2;
-                    mProgressBar.setVisibility(View.VISIBLE);
+                    binding.progressBar.setVisibility(View.VISIBLE);
                     if (mAnimator != null && mAnimator.isRunning()) {
                         mAnimator.cancel();
                     }
-                    mAnimator = ObjectAnimator.ofInt(mProgressBar, "progress", mDstProgressIndex);
+                    mAnimator = ObjectAnimator.ofInt(binding.progressBar, "progress", mDstProgressIndex);
                     mAnimator.setDuration(mDuration);
                     mAnimator.addListener(new AnimatorListenerAdapter() {
                         @Override
                         public void onAnimationEnd(Animator animation) {
-                            if (mProgressBar.getProgress() == 100) {
+                            if (binding.progressBar.getProgress() == 100) {
                                 sendEmptyMessageDelayed(PROGRESS_GONE, 500);
                             }
                         }
@@ -336,12 +259,12 @@ public class QDWebExplorerFragment extends BaseFragment {
                 case PROGRESS_GONE:
                     mDstProgressIndex = 0;
                     mDuration = 0;
-                    mProgressBar.setProgress(0);
-                    mProgressBar.setVisibility(View.GONE);
+                    binding.progressBar.setProgress(0);
+                    binding.progressBar.setVisibility(View.GONE);
                     if (mAnimator != null && mAnimator.isRunning()) {
                         mAnimator.cancel();
                     }
-                    mAnimator = ObjectAnimator.ofInt(mProgressBar, "progress", 0);
+                    mAnimator = ObjectAnimator.ofInt(binding.progressBar, "progress", 0);
                     mAnimator.setDuration(0);
                     mAnimator.removeAllListeners();
                     mIsPageFinished = true;
@@ -349,6 +272,20 @@ public class QDWebExplorerFragment extends BaseFragment {
                 default:
                     break;
             }
+        }
+    }
+
+    private void handleUrl(String url) {
+        if (mNeedDecodeUrl) {
+            String decodeURL;
+            try {
+                decodeURL = URLDecoder.decode(url, "utf-8");
+            } catch (UnsupportedEncodingException ignored) {
+                decodeURL = url;
+            }
+            mUrl = decodeURL;
+        } else {
+            mUrl = url;
         }
     }
 }

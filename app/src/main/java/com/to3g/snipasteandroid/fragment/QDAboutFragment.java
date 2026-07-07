@@ -1,111 +1,72 @@
-/*
- * Tencent is pleased to support the open source community by making QMUI_Android available.
- *
- * Copyright (C) 2017-2018 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the MIT License (the "License"); you may not use this file except in
- * compliance with the License. You may obtain a copy of the License at
- *
- * http://opensource.org/licenses/MIT
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.to3g.snipasteandroid.fragment;
 
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.fragment.app.Fragment;
-import com.qmuiteam.qmui.util.QMUIPackageHelper;
-import com.qmuiteam.qmui.widget.QMUITopBarLayout;
-import com.qmuiteam.qmui.widget.grouplist.QMUIGroupListView;
+
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
+import com.to3g.snipasteandroid.databinding.FragmentAboutBinding;
 import com.to3g.snipasteandroid.lib.ClipBoardUtil;
+import com.to3g.snipasteandroid.lib.Group;
+import com.to3g.snipasteandroid.lib.PackageUtils;
+import com.to3g.snipasteandroid.lib.annotation.Widget;
 
 import java.text.SimpleDateFormat;
 import java.util.Locale;
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
-
 import static com.to3g.snipasteandroid.fragment.QDWebExplorerFragment.EXTRA_URL;
 import static com.to3g.snipasteandroid.fragment.QDWebExplorerFragment.EXTRA_TITLE;
 
-
 /**
  * 关于界面
- * <p>
- * Created by Kayo on 2016/11/18.
  */
 public class QDAboutFragment extends BaseFragment {
 
-    @BindView(R.id.topbar) QMUITopBarLayout mTopBar;
-    @BindView(R.id.version) TextView mVersionTextView;
-    @BindView(R.id.about_list) QMUIGroupListView mAboutGroupListView;
-    @BindView(R.id.copyright) TextView mCopyrightTextView;
-
+    private FragmentAboutBinding binding;
     private static final String TAG = "QDAboutFragment";
 
     @Override
-    protected View onCreateView() {
-        View root = LayoutInflater.from(getActivity()).inflate(R.layout.fragment_about, null);
-        ButterKnife.bind(this, root);
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        binding = FragmentAboutBinding.inflate(inflater, container, false);
 
         initTopBar();
 
-        mVersionTextView.setText(QMUIPackageHelper.getAppVersion(getContext()));
+        binding.version.setText(PackageUtils.getAppVersion(requireContext()));
 
-        QMUIGroupListView.newSection(getContext())
-                .addItemView(mAboutGroupListView.createItemView(getResources().getString(R.string.about_item_homepage)), new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        String url = "https://qmuiteam.com/android";
-                        Bundle bundle = new Bundle();
-                        bundle.putString(EXTRA_URL, url);
-                        bundle.putString(EXTRA_TITLE, getResources().getString(R.string.about_item_homepage));
-                        Fragment fragment = new QDWebExplorerFragment();
-                        fragment.setArguments(bundle);
-                        startFragment(fragment);
-                    }
-                })
-                .addItemView(mAboutGroupListView.createItemView(getResources().getString(R.string.about_item_github)), new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        String url = "https://github.com/Tencent/QMUI_Android";
-                        Bundle bundle = new Bundle();
-                        bundle.putString(EXTRA_URL, url);
-                        bundle.putString(EXTRA_TITLE, getResources().getString(R.string.about_item_github));
-                        Fragment fragment = new QDWebExplorerFragment();
-                        fragment.setArguments(bundle);
-                        startFragment(fragment);
-                    }
-                })
-                .addTo(mAboutGroupListView);
+        addAboutItem(getResources().getString(R.string.about_item_homepage), "https://qmuiteam.com/android");
+        addAboutItem(getResources().getString(R.string.about_item_github), "https://github.com/Tencent/QMUI_Android");
 
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy", Locale.CHINA);
         String currentYear = dateFormat.format(new java.util.Date());
-        mCopyrightTextView.setText(String.format(getResources().getString(R.string.about_copyright), currentYear));
+        binding.copyright.setText(String.format(getResources().getString(R.string.about_copyright), currentYear));
 
-        return root;
+        return binding.getRoot();
     }
 
     private void initTopBar() {
-        mTopBar.addLeftBackImageButton().setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                popBackStack();
-            }
-        });
+        binding.topbar.setNavigationIcon(R.drawable.ic_arrow_back);
+        binding.topbar.setNavigationOnClickListener(v -> popBackStack());
+        binding.topbar.setTitle(getResources().getString(R.string.about_title));
+    }
 
-        mTopBar.setTitle(getResources().getString(R.string.about_title));
+    private void addAboutItem(String title, String url) {
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_about_row, binding.aboutList, false);
+        ((TextView) row.findViewById(R.id.title)).setText(title);
+        row.setOnClickListener(v -> {
+            Bundle bundle = new Bundle();
+            bundle.putString(EXTRA_URL, url);
+            bundle.putString(EXTRA_TITLE, title);
+            Fragment fragment = new QDWebExplorerFragment();
+            fragment.setArguments(bundle);
+            startFragment(fragment);
+        });
+        binding.aboutList.addView(row);
     }
 
     @Override
@@ -113,8 +74,5 @@ public class QDAboutFragment extends BaseFragment {
         super.onResume();
         String content = ClipBoardUtil.get(getContext());
         Log.d(TAG, "onResume: " + content);
-//        if (content != null) {
-//            editText.setText(content);
-//        }
     }
 }

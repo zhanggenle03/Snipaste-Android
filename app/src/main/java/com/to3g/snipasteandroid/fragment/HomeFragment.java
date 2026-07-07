@@ -1,10 +1,10 @@
 package com.to3g.snipasteandroid.fragment;
 
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Size;
@@ -26,13 +26,9 @@ import com.lzf.easyfloat.EasyFloat;
 import com.lzf.easyfloat.enums.ShowPattern;
 import com.lzf.easyfloat.interfaces.OnFloatCallbacks;
 import com.lzf.easyfloat.permission.PermissionUtils;
-import com.qmuiteam.qmui.arch.annotation.LatestVisitRecord;
-import com.qmuiteam.qmui.widget.QMUITopBarLayout;
-import com.qmuiteam.qmui.widget.dialog.QMUIDialog;
-import com.qmuiteam.qmui.widget.dialog.QMUIDialogAction;
-import com.qmuiteam.qmui.widget.roundwidget.QMUIRoundButton;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
+import com.to3g.snipasteandroid.databinding.HomeLayoutBinding;
 import com.to3g.snipasteandroid.lib.ClipBoardUtil;
 import com.to3g.snipasteandroid.lib.GlideEngine;
 import com.to3g.snipasteandroid.lib.Group;
@@ -42,54 +38,34 @@ import com.to3g.snipasteandroid.lib.TextBitmapUtil;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 import com.to3g.snipasteandroid.view.ScaleImage;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.OnClick;
-
-@LatestVisitRecord
 @Widget(group = Group.Other, name = "Home")
 public class HomeFragment extends BaseFragment {
 
     private static final String TAG = "HomeFragment";
 
-    @BindView(R.id.editText)
-    EditText editText;
-
-    @BindView(R.id.pasteTextButton)
-    QMUIRoundButton pasteTextButton;
-
-    @BindView(R.id.pasteClipboardButton)
-    QMUIRoundButton pasteClipboardButton;
-
-    @BindView(R.id.topbar)
-    QMUITopBarLayout mTopBar;
-
-    @BindView(R.id.albumButton)
-    QMUIRoundButton albumButton;
-
-    @BindView(R.id.cameraButton)
-    QMUIRoundButton cameraButton;
-
+    private HomeLayoutBinding binding;
     private List<String> floatingImages = new ArrayList<>();
 
 
     @Override
-    protected View onCreateView() {
-        // bind view
-        View root = LayoutInflater.from(getContext()).inflate(R.layout.home_layout, null);
-        ButterKnife.bind(this, root);
-        // init the top bar
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        binding = HomeLayoutBinding.inflate(inflater, container, false);
         initTopBar();
-
-        return root;
+        binding.pasteTextButton.setOnClickListener(v -> onPasteTextButtonClick());
+        binding.pasteClipboardButton.setOnClickListener(v -> onPasteClickboardButtonClick());
+        binding.albumButton.setOnClickListener(v -> onAlbumButtonClick());
+        binding.cameraButton.setOnClickListener(v -> onCameraButtonClick());
+        return binding.getRoot();
     }
 
-    private void pasteCamera () {
+    private void pasteCamera() {
         PictureSelector
                 .create(getActivity())
                 .openCamera(PictureMimeType.ofImage())
@@ -112,39 +88,11 @@ public class HomeFragment extends BaseFragment {
     /**
      * When click the camera button
      */
-    @OnClick(R.id.cameraButton)
-    protected void onCameraButtonClick () {
-        // check the permission
-        if (PermissionUtils.checkPermission(Objects.requireNonNull(getContext()))) {
-            pasteCamera();
-        } else {
-            // prompt to request permission
-            new QMUIDialog.MessageDialogBuilder(getActivity())
-                    .setMessage(getText(R.string.floatingPermissionText))
-                    .addAction(getText(R.string.cancelText), new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                        }
-                    })
-                    .addAction(0, getText(R.string.toOpen), QMUIDialogAction.ACTION_PROP_POSITIVE, new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                            PermissionUtils.requestPermission(getActivity(), result -> {
-                                if(result) {
-                                    pasteCamera();
-                                } else {
-                                    Toast.makeText(getContext(), getText(R.string.needFloatingPermission), Toast.LENGTH_SHORT).show();
-                                }
-                            });
-                        }
-                    })
-                    .create(R.style.QMUI_Dialog).show();
-        }
+    protected void onCameraButtonClick() {
+        ensureFloatPermissionThen(this::pasteCamera);
     }
 
-    private void pasteAlbum () {
+    private void pasteAlbum() {
         PictureSelector
                 .create(getActivity())
                 .openGallery(PictureMimeType.ofImage())
@@ -169,36 +117,8 @@ public class HomeFragment extends BaseFragment {
     /**
      * When click the album button
      */
-    @OnClick(R.id.albumButton)
-    protected void onAlbumButtonClick () {
-        // check the permission
-        if (PermissionUtils.checkPermission(Objects.requireNonNull(getContext()))) {
-            pasteAlbum();
-        } else {
-            // prompt to request permission
-            new QMUIDialog.MessageDialogBuilder(getActivity())
-                    .setMessage(getText(R.string.floatingPermissionText))
-                    .addAction(getText(R.string.cancelText), new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                        }
-                    })
-                    .addAction(0, getText(R.string.toOpen), QMUIDialogAction.ACTION_PROP_POSITIVE, new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                            PermissionUtils.requestPermission(getActivity(), result -> {
-                                if(result) {
-                                    pasteAlbum();
-                                } else {
-                                    Toast.makeText(getContext(), getText(R.string.needFloatingPermission), Toast.LENGTH_SHORT).show();
-                                }
-                            });
-                        }
-                    })
-                    .create(R.style.QMUI_Dialog).show();
-        }
+    protected void onAlbumButtonClick() {
+        ensureFloatPermissionThen(this::pasteAlbum);
     }
 
     @Override
@@ -217,13 +137,11 @@ public class HomeFragment extends BaseFragment {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
-    private ViewGroup.LayoutParams getDefaultParams (String path, ViewGroup.LayoutParams layoutParams) {
-
+    private ViewGroup.LayoutParams getDefaultParams(String path, ViewGroup.LayoutParams layoutParams) {
         DisplayMetrics displayMetrics = new DisplayMetrics();
         getActivity().getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
         int screenWidth = displayMetrics.widthPixels;
 
-        // 获取图片宽高
         Size size = ImageUtil.getImageSize(path);
         int imgWidth = size.getWidth();
         int imgHeight = size.getHeight();
@@ -237,13 +155,11 @@ public class HomeFragment extends BaseFragment {
         return layoutParams;
     }
 
-    private ViewGroup.LayoutParams getDefaultParams (Bitmap bitmap, ViewGroup.LayoutParams layoutParams) {
-
+    private ViewGroup.LayoutParams getDefaultParams(Bitmap bitmap, ViewGroup.LayoutParams layoutParams) {
         DisplayMetrics displayMetrics = new DisplayMetrics();
         getActivity().getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
         int screenWidth = displayMetrics.widthPixels;
 
-        // 获取图片宽高
         int imgWidth = bitmap.getWidth();
         int imgHeight = bitmap.getHeight();
         Log.d(TAG, String.format("initImageView: image size：%d, %d", imgWidth, imgHeight));
@@ -265,17 +181,19 @@ public class HomeFragment extends BaseFragment {
                 .setTag(path)
                 .registerCallbacks(new OnFloatCallbacks() {
                     @Override
-                    public void createdResult(boolean isCreated, String msg, View view) { }
+                    public void createdResult(boolean isCreated, String msg, View view) {
+                    }
 
                     @Override
-                    public void show(View view) { }
+                    public void show(View view) {
+                    }
 
                     @Override
-                    public void hide(View view) { }
+                    public void hide(View view) {
+                    }
 
                     @Override
                     public void dismiss() {
-                        // 贴图浮窗被销毁时，务必带走其透明度滑块，避免残留
                         SharePasteHelper.dismissOpacitySlider(path);
                         floatingImages.remove(path);
                     }
@@ -319,11 +237,8 @@ public class HomeFragment extends BaseFragment {
 
             @Override
             public void onScaleChange(float scaleFactor, float focusX, float focusY) {
-
             }
         };
-        // 透明度滑块仍由浮窗 touchEvent -> SharePasteHelper.handleFloatTouch 双击触发。
-        // 关闭贴图改为：拖出屏幕边缘 -> 底部弹出「收起/关闭」选择（见 SharePasteHelper.onStickerDragEnd）。
         SharePasteHelper.attachOpacitySlider(getActivity(), path, imageOutterShadow);
     }
 
@@ -333,10 +248,6 @@ public class HomeFragment extends BaseFragment {
         showImageFloatByBitmap("bitmap", bitmap, lp.width, lp.height);
     }
 
-    /**
-     * 以图片贴图方式展示一张 Bitmap（截图、文字转图等共用此路径）。
-     * 文字贴图先把文字渲染成 Bitmap，再走这里，从而复用图片贴图流畅的缩放体验。
-     */
     private void showImageFloatByBitmap(String tagName, Bitmap bitmap, int initWidth, int initHeight) {
         EasyFloat
                 .with(Objects.requireNonNull(getActivity()))
@@ -346,17 +257,19 @@ public class HomeFragment extends BaseFragment {
                 .setTag(tagName)
                 .registerCallbacks(new OnFloatCallbacks() {
                     @Override
-                    public void createdResult(boolean isCreated, String msg, View view) { }
+                    public void createdResult(boolean isCreated, String msg, View view) {
+                    }
 
                     @Override
-                    public void show(View view) { }
+                    public void show(View view) {
+                    }
 
                     @Override
-                    public void hide(View view) { }
+                    public void hide(View view) {
+                    }
 
                     @Override
                     public void dismiss() {
-                        // 贴图浮窗被销毁时，务必带走其透明度滑块，避免残留
                         SharePasteHelper.dismissOpacitySlider(tagName);
                         floatingImages.remove(tagName);
                     }
@@ -402,87 +315,71 @@ public class HomeFragment extends BaseFragment {
 
             @Override
             public void onScaleChange(float scaleFactor, float focusX, float focusY) {
-
             }
         };
-        // 透明度滑块仍由浮窗 touchEvent -> SharePasteHelper.handleFloatTouch 双击触发。
-        // 关闭贴图改为：拖出屏幕边缘 -> 底部弹出「收起/关闭」选择（见 SharePasteHelper.onStickerDragEnd）。
         SharePasteHelper.attachOpacitySlider(getActivity(), tagName, imageOutterShadow);
     }
 
-    @OnClick(R.id.pasteTextButton)
-    protected void onPasteTextButtonClick () {
-        floatText(editText.getText().toString());
+    protected void onPasteTextButtonClick() {
+        floatText(binding.editText.getText().toString());
     }
 
-    @OnClick(R.id.pasteClipboardButton)
-    protected void onPasteClickboardButtonClick () {
+    protected void onPasteClickboardButtonClick() {
         String content = ClipBoardUtil.get(Objects.requireNonNull(getContext()));
         Log.d(TAG, "clipboard content: " + content);
-        editText.setText(content);
+        binding.editText.setText(content);
         floatText(content);
     }
 
-    private void showFloatText (String content) {
+    private void showFloatText(String content) {
         if (content == null || content.trim().isEmpty()) {
             Toast.makeText(getContext(), getText(R.string.blankContent), Toast.LENGTH_SHORT).show();
             return;
         }
-        // 相同内容视为同一个贴图，避免重复创建
         String tag = "text_" + content.hashCode();
         if (EasyFloat.getAppFloatView(tag) != null) {
             Toast.makeText(getContext(), getText(R.string.textFloated), Toast.LENGTH_SHORT).show();
             return;
         }
-        // 将文字渲染为图片，复用图片贴图路径：缩放更流畅、无文字重排抖动、无多余空白
         Bitmap textBitmap = TextBitmapUtil.create(getContext(), content);
         showImageFloatByBitmap(tag, textBitmap, textBitmap.getWidth(), textBitmap.getHeight());
     }
 
     private void floatText(String content) {
-        // check the permission
+        ensureFloatPermissionThen(() -> showFloatText(content));
+    }
+
+    private void ensureFloatPermissionThen(Runnable action) {
         if (PermissionUtils.checkPermission(Objects.requireNonNull(getContext()))) {
-            showFloatText(content);
+            action.run();
         } else {
-            // prompt to request permission
-            new QMUIDialog.MessageDialogBuilder(getActivity())
+            new MaterialAlertDialogBuilder(requireContext())
                     .setMessage(getText(R.string.floatingPermissionText))
-                    .addAction(getText(R.string.cancelText), new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                        }
+                    .setNegativeButton(R.string.cancelText, (d, i) -> d.dismiss())
+                    .setPositiveButton(R.string.toOpen, (d, i) -> {
+                        d.dismiss();
+                        PermissionUtils.requestPermission(getActivity(), result -> {
+                            if (result) {
+                                action.run();
+                            } else {
+                                Toast.makeText(getContext(), getText(R.string.needFloatingPermission), Toast.LENGTH_SHORT).show();
+                            }
+                        });
                     })
-                    .addAction(0, getText(R.string.toOpen), QMUIDialogAction.ACTION_PROP_POSITIVE, new QMUIDialogAction.ActionListener() {
-                        @Override
-                        public void onClick(QMUIDialog dialog, int index) {
-                            dialog.dismiss();
-                            PermissionUtils.requestPermission(getActivity(), result -> {
-                                if(result) {
-                                    showFloatText(content);
-                                } else {
-                                    Toast.makeText(getContext(), getText(R.string.needFloatingPermission), Toast.LENGTH_SHORT).show();
-                                }
-                            });
-                        }
-                    })
-                    .create(R.style.QMUI_Dialog).show();
+                    .show();
         }
     }
 
     private void initTopBar() {
-        mTopBar.setTitle(getString(R.string.app_name));
-        mTopBar.addRightImageButton(R.mipmap.icon_topbar_overflow, R.id.topbar_right_change_button)
-                .setOnClickListener(v -> {
-                   clearAllFloatViews();
-                });
+        binding.topbar.setTitle(getString(R.string.app_name));
+        binding.topbarRightChangeButton.setOnClickListener(v -> clearAllFloatViews());
     }
 
     /**
      * 清空所有浮窗（本 Fragment 与 SharePasteHelper 创建的）
      */
-    private void clearAllFloatViews () {
-        for (String path : floatingImages) {
+    private void clearAllFloatViews() {
+        for (String path : new ArrayList<>(floatingImages)) {
             SharePasteHelper.closeSticker(path);
         }
         floatingImages.clear();
@@ -490,15 +387,5 @@ public class HomeFragment extends BaseFragment {
             SharePasteHelper.closeSticker(tag);
         }
         SharePasteHelper.getHelperImageTags().clear();
-    }
-
-    @Override
-    public Object onLastFragmentFinish() {
-        return null;
-    }
-
-    @Override
-    protected boolean canDragBack(Context context, int dragDirection, int moveEdge) {
-        return false;
     }
 }
