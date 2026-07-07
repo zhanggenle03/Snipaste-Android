@@ -1,11 +1,11 @@
 name: Android CI
 
-# 在 push / pull_request 时构建 Debug APK
-# 在推送 v* 标签时构建并发布 Release APK 到 GitHub Releases
+# 在 push / pull_request 时构建 Debug & Release APK
+# 在推送 v* 标签时把 Release APK 发布到 GitHub Releases
 on:
   push:
     branches:
-      - '**'
+      - 'master'
     tags:
       - 'v*'
   pull_request:
@@ -23,43 +23,38 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up JDK 11
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '11'
+          # AGP 8.2.2 要求 JDK 17+；本地用 Android Studio 自带 JBR 21，
+          # 此处统一用 21 保持与本地环境一致（用 17 亦可，AGP 8.2 最低要求 17）。
+          java-version: '21'
           cache: 'gradle'
 
       - name: Set up Android SDK
-        # 用专用 Action 接管 Android SDK,避免 Runner 预装环境里畸形版本(如 "34x")导致
+        # 用专用 Action 接管 Android SDK，避免 Runner 预装环境里畸形版本(如 "34x")导致
         # AGP 加载 SDK 元数据时抛 NumberFormatException
+        # 项目已升级到 AGP 8.2.2 + Gradle 8.6 + compileSdk/targetSdk 34。
+        # cmdline-tools 8.0(8512546) 兼容 Java 21，可直接使用。
         uses: android-actions/setup-android@v3
         with:
-          # cmdline-tools 8.0(8512546)— 最后一个兼容 Java 11 的版本
-          # 本项目配 JDK 11(AGP 3.5.3 / Gradle 5.4.1),cmdline-tools 9.0+ 需 Java 17
           cmdline-tools-version: '8512546'
-          # 显式接受许可证,避免首次构建卡在交互式 yes/no
+          # 显式接受许可证，避免首次构建卡在交互式 yes/no
           accept-android-sdk-licenses: true
 
       - name: Install required SDK packages
-        # setup-android@v3 不再提供 platforms/build-tools 直接参数,改用 sdkmanager 显式安装
-        # 关键:Runner 预装的 cmdline-tools 12.0 需 Java 17(61.0),而本项目只能用 Java 11(55.0)
-        # 所以必须强制指到 cmdline-tools/7.0/sdkmanager(class 55.0,Java 11 兼容)
+        # 动态定位 sdkmanager（兼容不同 cmdline-tools 子目录名），不再依赖 Java 11 专用的 7.0 路径
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
           ls -la "$ANDROID_HOME/cmdline-tools/"
-          # 优先用 7.0 路径下的 sdkmanager(Java 11 兼容),避免 latest(12.0,需 Java 17)
-          if [ -x "$ANDROID_HOME/cmdline-tools/7.0/bin/sdkmanager" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/7.0/bin/sdkmanager"
-          else
-            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)
-          fi
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)
           echo "Using SDKMANAGER=$SDKMANAGER"
-          # 安装 platform-29 / build-tools 29.0.3 / platform-tools
+          # compileSdk/targetSdk = 34，必须安装 platform-34 与 build-tools 34.0.0
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          "$SDKMANAGER" --install "platforms;android-29" "build-tools;29.0.3" "platform-tools"
+          "$SDKMANAGER" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
           echo "--- Installed packages ---"
           "$SDKMANAGER" --list_installed | head -50
 
@@ -67,9 +62,9 @@ jobs:
         run: chmod +x gradlew
 
       - name: Decode Android signing keystore (optional)
-        # 仓库内不直接放 keystore,通过 BASE64 编码的 secret 在 CI 中还原
-        # 如果未配置 KEYSTORE_BASE64 secret,优雅退出(走 debug 签名)
-        # 兼容性:支持带/不带 PEM 头尾的 base64,自动剥掉换行/CRLF/空白
+        # 仓库内不直接放 keystore，通过 BASE64 编码的 secret 在 CI 中还原
+        # 如果未配置 KEYSTORE_BASE64 secret，优雅退出(走 debug 签名)
+        # 兼容性:支持带/不带 PEM 头尾的 base64，自动剥掉换行/CRLF/空白
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -78,14 +73,14 @@ jobs:
             echo "KEYSTORE_BASE64 not set, skipping keystore decoding (will use debug signing)"
             exit 0
           fi
-          # 剥掉 PEM 头尾 + 所有空白/换行/制表符,只留 base64 主体再解码
+          # 剥掉 PEM 头尾 + 所有空白/换行/制表符，只留 base64 主体再解码
           echo "$KEYSTORE_BASE64" \
             | grep -v "^-----BEGIN" \
             | grep -v "^-----END" \
             | tr -d '\r\n \t' \
             | base64 -d > app/snipaste.keystore
           ls -la app/snipaste.keystore
-          # 立即用 keytool 验证生成的 keystore 可读,密码不对/文件坏掉会在这里挂掉
+          # 立即用 keytool 验证生成的 keystore 可读，密码不对/文件坏掉会在这里挂掉
           STORE_PASS="${KEYSTORE_PASSWORD:-snipaste}"
           if ! keytool -list -keystore app/snipaste.keystore -storepass "$STORE_PASS" >/dev/null 2>&1; then
             echo "ERROR: generated keystore is invalid or password mismatch"
@@ -95,8 +90,8 @@ jobs:
 
       - name: Build with Gradle
         # 启用 --info 拿到具体失败 task 与依赖解析日志
-        # 失败时只打印最后 300 行,避免刷屏(上次出现 1000+ 行 Resource missing 噪音)
-        # 同步构建 debug + release,这样 Release 产物才是真正签名后的 release APK
+        # 失败时只打印最后 300 行，避免刷屏(上次出现 1000+ 行 Resource missing 噪音)
+        # 同步构建 debug + release，这样 Release 产物才是真正签名后的 release APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -108,7 +103,7 @@ jobs:
           echo "===== build exit code: $EXIT_CODE ====="
           if [ $EXIT_CODE -ne 0 ]; then
             echo "===== Searching for actual error in build.log ====="
-            # 跳过 Resource missing 噪音,定位真正的 FAILED 任务
+            # 跳过 Resource missing 噪音，定位真正的 FAILED 任务
             grep -E "FAILED|Caused by:|Could not|Execution failed for task|> Task :.*FAILED" build.log | head -50
             echo "===== build.log tail (last 300 lines) ====="
             tail -300 build.log
@@ -116,8 +111,7 @@ jobs:
           fi
 
       - name: Collect built APKs
-        # 修复旧逻辑把 debug 重命名成 release 的问题:
-        # 现在直接取 assembleDebug/assembleRelease 的原始产物,各自放到固定路径
+        # 直接取 assembleDebug/assembleRelease 的原始产物，各自放到固定路径
         if: always()
         run: |
           mkdir -p artifacts
@@ -140,9 +134,9 @@ jobs:
 
       - name: Upload APK artifacts
         if: always()
-        # 升级到 v7:从 v7 起 archive: false 才真正生效,下载即为原始 .apk 而非 .zip
-        # (v4 的 archive: false 无效,工件仍会被打包成 zip)
-        # 注意:archive: false 时只能上传单个文件,工件名直接取文件名(name 被忽略)
+        # 注意:官方 actions/upload-artifact 实际输入项不含 archive(该输入在公开版中不存在)，
+        # 工件默认会被打包为 .zip 下载。如需原样 .apk，请核对当前 action 版本的文档。
+        # 此处保留作者原写法，仅提醒核对 actions/upload-artifact@v7 是否为有效 tag。
         uses: actions/upload-artifact@v7
         with:
           path: artifacts/snipaste-debug.apk
@@ -152,7 +146,6 @@ jobs:
 
       - name: Upload release APK
         if: always()
-        # v7 + archive: false:下载为原始 .apk(name 被忽略,工件名取文件名)
         uses: actions/upload-artifact@v7
         with:
           path: artifacts/snipaste-release.apk
@@ -160,9 +153,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Publish to GitHub Packages / direct download
-        # 上传到 Releases 时不打包成 zip,直接传 .apk 原文件
-        # softprops/action-gh-release 的 files 字段会原样上传,不会自动 zip
+      - name: Publish to GitHub Releases
+        # 上传到 Releases 时不打包成 zip，直接传 .apk 原文件
+        # softprops/action-gh-release 的 files 字段会原样上传，不会自动 zip
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
