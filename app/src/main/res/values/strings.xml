@@ -79,8 +79,11 @@
     <string name="perm_overlay_desc">允许应用在其他应用上层显示悬浮窗</string>
     <string name="perm_camera_title">相机</string>
     <string name="perm_camera_desc">用于拍摄图片并贴到屏幕</string>
-    <string name="perm_foreground_title">前台服务</string>
-    <string name="perm_foreground_desc">保持贴图在后台持续运行</string>
+    <string name="perm_clipboard_title">剪切板</string>
+    <string name="perm_clipboard_desc">在控制中心磁贴、接收分享时读取剪切板以实现快速贴图（系统隐私记录，无需授权）</string>
+    <string name="perm_status_granted">已授权</string>
+    <string name="perm_status_denied">未授权</string>
+    <string name="perm_status_not_required">无需授权</string>
     <string name="file_access_failed">无法访问图片文件</string>
     <string name="camera_permission_denied">相机权限被拒绝，无法拍照</string>
 
