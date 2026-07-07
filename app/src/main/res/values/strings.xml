@@ -54,6 +54,7 @@
     <string name="settings_title">设置</string>
     <string name="settings_general">常规设置</string>
     <string name="settings_gesture">手势设置</string>
+    <string name="settings_other">其他</string>
     <string name="setting_tile_add">一键贴文</string>
     <string name="tile_remove_manual">「一键贴文」磁贴无法自动移除，请在控制中心编辑区手动移除</string>
     <string name="tile_status_added">已添加</string>
@@ -66,6 +67,9 @@
     <string name="setting_double_tap_opacity">双击浮窗调整不透明度</string>
     <string name="setting_drag_edge_close">拖到屏幕边缘关闭</string>
     <string name="setting_pinch_zoom">双指缩放贴图</string>
+    <string name="setting_collapse_mode">收起形式</string>
+    <string name="collapse_mode_thumb">缩略图</string>
+    <string name="collapse_mode_strip">贴边条</string>
     <string name="permission_list_title">权限清单</string>
     <string name="permission_list_button">权限清单</string>
 
@@ -79,4 +83,14 @@
     <string name="perm_foreground_desc">保持贴图在后台持续运行</string>
     <string name="file_access_failed">无法访问图片文件</string>
     <string name="camera_permission_denied">相机权限被拒绝，无法拍照</string>
+
+    <!-- 错误日志 -->
+    <string name="log_viewer_title">错误日志</string>
+    <string name="log_copy">复制</string>
+    <string name="log_clear">清空</string>
+    <string name="log_copied">已复制到剪贴板</string>
+    <string name="log_cleared">日志已清空</string>
+    <string name="log_entry_title">错误日志</string>
+    <string name="log_entry_detail">查看崩溃与运行日志</string>
+    <string name="log_entry_detail_crash">⚠ 有未读崩溃，点击查看</string>
 </resources>

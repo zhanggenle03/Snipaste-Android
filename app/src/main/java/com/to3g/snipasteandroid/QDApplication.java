@@ -7,6 +7,8 @@ import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 
+import com.to3g.snipasteandroid.lib.AppLog;
+
 public class QDApplication extends Application {
 
     @SuppressWarnings("StaticFieldLeak")
@@ -26,6 +28,8 @@ public class QDApplication extends Application {
     public void onCreate() {
         super.onCreate();
         context = getApplicationContext();
+        // 初始化全局日志：捕获未处理崩溃 + 记录运行日志（供「错误日志」页面排查）
+        AppLog.init(context);
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityResumed(@NonNull Activity activity) {
@@ -38,7 +42,9 @@ public class QDApplication extends Application {
             }
 
             @Override
-            public void onActivityCreated(@NonNull Activity activity, Bundle savedInstanceState) { }
+            public void onActivityCreated(@NonNull Activity activity, Bundle savedInstanceState) {
+                AppLog.d("Lifecycle", "create " + activity.getClass().getSimpleName());
+            }
 
             @Override
             public void onActivityStarted(@NonNull Activity activity) { }

@@ -30,7 +30,8 @@ import com.lzf.easyfloat.EasyFloat;
 import com.lzf.easyfloat.enums.ShowPattern;
 import com.lzf.easyfloat.interfaces.OnFloatCallbacks;
 import com.lzf.easyfloat.permission.PermissionUtils;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import androidx.appcompat.app.AlertDialog;
+import android.view.ContextThemeWrapper;
 import com.to3g.snipasteandroid.QDApplication;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.view.ScaleImage;
@@ -101,6 +102,8 @@ public class SharePasteHelper {
     }
     /** 已收起(最小化)的贴图 tag，便于销毁时一并清理把手 */
     private static final Set<String> collapsedTags = new HashSet<>();
+    /** 收起把手自身的单击检测状态（与贴图本体的 tapStates 分开，把手 tag 不同于贴图 tag） */
+    private static final Map<String, TapState> handleTapStates = new HashMap<>();
 
     // 边枚举（用于判断贴图被拖向哪条边、把手应停靠在哪条边）
     private static final int EDGE_LEFT = 0;
@@ -110,6 +113,9 @@ public class SharePasteHelper {
     /** 收起把手(缩略条)尺寸(dp) */
     private static final int HANDLE_W_DP = 48;
     private static final int HANDLE_H_DP = 64;
+    /** 贴边条尺寸(dp)：贴向左右边时为竖条(厚 x 长)，贴向上下边时为横条(长 x 厚) */
+    private static final int STRIP_THICK_DP = 12;
+    private static final int STRIP_LEN_DP = 72;
 
     private static float density() {
         return Resources.getSystem().getDisplayMetrics().density;
@@ -217,7 +223,7 @@ public class SharePasteHelper {
             showFloatText(activity, content);
         } else {
             // 引导开启悬浮窗权限
-            new MaterialAlertDialogBuilder(activity)
+            new AlertDialog.Builder(new ContextThemeWrapper(activity, R.style.AppDialogTheme))
                     .setMessage(activity.getText(R.string.floatingPermissionText))
                     .setNegativeButton(activity.getText(R.string.cancelText), (dialog, which) -> dialog.dismiss())
                     .setPositiveButton(activity.getText(R.string.toOpen),
@@ -272,7 +278,7 @@ public class SharePasteHelper {
             }
         } else {
             // 引导开启悬浮窗权限
-            new MaterialAlertDialogBuilder(activity)
+            new AlertDialog.Builder(new ContextThemeWrapper(activity, R.style.AppDialogTheme))
                     .setMessage(activity.getText(R.string.floatingPermissionText))
                     .setNegativeButton(activity.getText(R.string.cancelText), (dialog, which) -> dialog.dismiss())
                     .setPositiveButton(activity.getText(R.string.toOpen),
@@ -790,15 +796,16 @@ public class SharePasteHelper {
         }
     }
 
-    /** 收起(最小化)到屏幕边缘：隐藏贴图本体，在拖出边显示可点击恢复的把手 */
+    /** 收起(最小化)到屏幕边缘：隐藏贴图本体，在拖出边显示可点击/可拖动的把手 */
     public static void collapseSticker(@NonNull String tag) {
         Point screen = screenSize();
         View sv = EasyFloat.getAppFloatView(tag);
         Rect r = sv != null ? stickerRect(sv) : null;
-        collapseSticker(tag, r, screen, makeThumbnail(tag));
+        int edge = (r != null) ? edgeOf(r, screen) : EDGE_RIGHT;
+        collapseSticker(tag, r, screen, edge);
     }
 
-    private static void collapseSticker(@NonNull String tag, Rect r, @NonNull Point screen, Bitmap thumb) {
+    private static void collapseSticker(@NonNull String tag, Rect r, @NonNull Point screen, int edge) {
         dismissActionSheet(tag);
         hideOpacitySlider(tag); // 收起时一并收起透明度滑块
         try {
@@ -807,11 +814,19 @@ public class SharePasteHelper {
             Log.e(TAG, "hideAppFloat failed: " + e.getMessage());
         }
         collapsedTags.add(tag);
-        showHandle(tag, r, screen, thumb);
+        // 按设置选择收起形式：贴边条 / 缩略图
+        int mode = Settings.getCollapseMode(QDApplication.getContext());
+        if (mode == Settings.COLLAPSE_MODE_STRIP) {
+            int cx = (r != null) ? r.centerX() : screen.x / 2;
+            int cy = (r != null) ? r.centerY() : screen.y / 2;
+            showStripHandle(tag, edge, screen, cx, cy);
+        } else {
+            showThumbHandle(tag, r, screen, makeThumbnail(tag));
+        }
     }
 
-    /** 在拖出边显示一个缩略条把手（点击恢复）。thumb 为贴图缩略图，可为 null(退化成纯色条) */
-    private static void showHandle(@NonNull String tag, Rect r, @NonNull Point screen, Bitmap thumb) {
+    /** 缩略图把手：点击恢复、可拖动(拖到别处释放后吸附回最近边)。thumb 可为 null(退化成纯色条) */
+    private static void showThumbHandle(@NonNull String tag, Rect r, @NonNull Point screen, Bitmap thumb) {
         Activity activity = currentActivity(tag);
         if (activity == null) return;
         String handleTag = tag + HANDLE_SUFFIX;
@@ -824,28 +839,165 @@ public class SharePasteHelper {
                 .setShowPattern(ShowPattern.ALL_TIME)
                 .setLocation(pos[0], pos[1])
                 .setTag(handleTag)
-                .setDragEnable(false)
+                .setDragEnable(true) // 允许拖动把手（修复最小化后无法拖动）
+                .registerCallbacks(newHandleCallbacks(tag, handleTag, false))
                 .show();
         View handle = EasyFloat.getAppFloatView(handleTag);
         if (handle == null) return;
         ImageView iv = handle.findViewById(R.id.handleThumb);
         if (iv != null && thumb != null) iv.setImageBitmap(thumb);
-        handle.setOnClickListener(v -> restoreSticker(tag));
     }
 
-    /** 根据贴图贴出的那条边，算出把手应放置的位置(贴边、居中于该边) */
+    /** 贴边条把手：细条贴边、点击恢复、可拖动(释放后按停靠边重建并保持朝向) */
+    private static void showStripHandle(@NonNull String tag, int edge, @NonNull Point screen) {
+        showStripHandle(tag, edge, screen, screen.x / 2, screen.y / 2);
+    }
+
+    private static void showStripHandle(@NonNull String tag, int edge, @NonNull Point screen, int cx, int cy) {
+        Activity activity = currentActivity(tag);
+        if (activity == null) return;
+        String handleTag = tag + HANDLE_SUFFIX;
+        if (EasyFloat.getAppFloatView(handleTag) != null) return;
+        boolean vertical = (edge == EDGE_LEFT || edge == EDGE_RIGHT);
+        final int w = (int) ((vertical ? STRIP_THICK_DP : STRIP_LEN_DP) * density());
+        final int h = (int) ((vertical ? STRIP_LEN_DP : STRIP_THICK_DP) * density());
+        int[] pos = dockedStripPosition(edge, screen, w, h, cx, cy);
+        EasyFloat.with(activity)
+                .setLayout(R.layout.image_paste_strip)
+                .setShowPattern(ShowPattern.ALL_TIME)
+                .setLocation(pos[0], pos[1])
+                .setTag(handleTag)
+                .setDragEnable(true) // 允许拖动把手（修复最小化后无法拖动）
+                .registerCallbacks(newHandleCallbacks(tag, handleTag, true))
+                .show();
+        View handle = EasyFloat.getAppFloatView(handleTag);
+        if (handle == null) return;
+        View bar = handle.findViewById(R.id.stripBar);
+        if (bar != null && bar.getLayoutParams() != null) {
+            ViewGroup.LayoutParams lp = bar.getLayoutParams();
+            lp.width = w;
+            lp.height = h;
+            bar.setLayoutParams(lp);
+        }
+    }
+
+    /** 统一构造收起把手的回调：轻点恢复、拖拽释放后吸附回最近边 */
+    @NonNull
+    private static OnFloatCallbacks newHandleCallbacks(@NonNull String tag, @NonNull String handleTag, boolean isStrip) {
+        return new OnFloatCallbacks() {
+            @Override
+            public void createdResult(boolean isCreated, String msg, View view) { }
+            @Override
+            public void show(View view) { }
+            @Override
+            public void hide(View view) { }
+            @Override
+            public void dismiss() { }
+            @Override
+            public void touchEvent(View view, MotionEvent event) {
+                handleHandleTouch(tag, handleTag, view, event);
+            }
+            @Override
+            public void drag(View view, MotionEvent event) { }
+            @Override
+            public void dragEnd(View view) {
+                handleHandleDragEnd(tag, handleTag, view, isStrip);
+            }
+        };
+    }
+
+    /** 收起把手的轻点判定：未发生明显移动则视为单击 -> 恢复贴图 */
+    private static void handleHandleTouch(@NonNull String tag, @NonNull String handleTag, @NonNull View view, @NonNull MotionEvent event) {
+        TapState s = handleTapStates.get(handleTag);
+        if (s == null) { s = new TapState(); handleTapStates.put(handleTag, s); }
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                s.downX = event.getRawX();
+                s.downY = event.getRawY();
+                s.moved = false;
+                break;
+            case MotionEvent.ACTION_MOVE: {
+                float dist = (float) Math.hypot(event.getRawX() - s.downX, event.getRawY() - s.downY);
+                if (dist > TAP_SLOP) s.moved = true;
+                break;
+            }
+            case MotionEvent.ACTION_UP:
+                if (!s.moved) {
+                    // 必须在本次触摸派发结束后再执行恢复：restoreSticker 会 dismiss/show 浮窗，
+                    // 若在 EasyFloat 的 touchEvent 回调里同步执行，会在其触摸派发过程中修改浮窗状态，
+                    // 导致 EasyFloat 内部崩溃（点击把手即闪退）。推迟到主线程下一轮派发即可避免。
+                    final String t = tag;
+                    view.post(() -> restoreSticker(t));
+                }
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                s.moved = false;
+                break;
+        }
+    }
+
+    /** 收起把手拖拽结束：吸附回最近边（缩略图直接平移；贴边条按边重建保持朝向） */
+    private static void handleHandleDragEnd(@NonNull String tag, @NonNull String handleTag, @NonNull View view, boolean isStrip) {
+        // 把手可能已在轻点时恢复(被销毁)，无需再处理
+        if (EasyFloat.getAppFloatView(handleTag) == null) return;
+        Point screen = screenSize();
+        Rect hr = stickerRect(view);
+        if (hr == null) return;
+        int edge = edgeOf(hr, screen);
+        // 把停靠/重建动作推迟到本次拖拽派发结束后再执行：在 EasyFloat 的 dragEnd 回调里同步
+        // dismiss/show 浮窗会与其触摸派发过程冲突，导致崩溃。先捕获所需值，再延后处理。
+        final String t = tag;
+        final String ht = handleTag;
+        final Point sc = screen;
+        final int e = edge;
+        final int cx = hr.centerX();
+        final int cy = hr.centerY();
+        view.post(() -> {
+            if (EasyFloat.getAppFloatView(ht) == null) return;
+            if (isStrip) {
+                try { EasyFloat.dismissAppFloat(ht); } catch (Exception ignored) { }
+                handleTapStates.remove(ht);
+                showStripHandle(t, e, sc, cx, cy);
+            } else {
+                int[] pos = dockedThumbPosition(e, sc,
+                        (int) (HANDLE_W_DP * density()), (int) (HANDLE_H_DP * density()),
+                        cx, cy);
+                View hv = EasyFloat.getAppFloatView(ht);
+                if (hv != null) moveFloatWindow(hv, pos[0], pos[1]);
+            }
+        });
+    }
+
+    /** 首次收起：按贴图所在边摆放缩略条(居中于该边) */
     private static int[] handlePosition(@NonNull Rect r, @NonNull Point screen) {
         int edge = edgeOf(r, screen);
         int hw = (int) (HANDLE_W_DP * density()), hh = (int) (HANDLE_H_DP * density());
-        int cx = r.centerX(), cy = r.centerY();
+        return dockedThumbPosition(edge, screen, hw, hh, r.centerX(), r.centerY());
+    }
+
+    /** 缩略图把手停靠到某边的位置；cx/cy 为把手中心(首次用贴图中心，拖拽后再停靠用把手当前中心) */
+    private static int[] dockedThumbPosition(int edge, @NonNull Point screen, int w, int h, int cx, int cy) {
         int m = (int) (4 * density());
         int x, y;
-        if (edge == EDGE_LEFT)       { x = m;              y = cy - hh / 2; }
-        else if (edge == EDGE_RIGHT) { x = screen.x - hw - m; y = cy - hh / 2; }
-        else if (edge == EDGE_TOP)   { x = cx - hw / 2;    y = m; }
-        else                         { x = cx - hw / 2;    y = screen.y - hh - m; }
-        x = Math.max(m, Math.min(x, screen.x - hw - m));
-        y = Math.max(m, Math.min(y, screen.y - hh - m));
+        if (edge == EDGE_LEFT)       { x = m;                y = cy - h / 2; }
+        else if (edge == EDGE_RIGHT) { x = screen.x - w - m; y = cy - h / 2; }
+        else if (edge == EDGE_TOP)   { x = cx - w / 2;       y = m; }
+        else                         { x = cx - w / 2;       y = screen.y - h - m; }
+        x = Math.max(m, Math.min(x, screen.x - w - m));
+        y = Math.max(m, Math.min(y, screen.y - h - m));
+        return new int[]{ x, y };
+    }
+
+    /** 贴边条把手停靠到某边的位置；cx/cy 为把手中心 */
+    private static int[] dockedStripPosition(int edge, @NonNull Point screen, int w, int h, int cx, int cy) {
+        int m = (int) (4 * density());
+        int x, y;
+        if (edge == EDGE_LEFT)       { x = m;                y = cy - h / 2; }
+        else if (edge == EDGE_RIGHT) { x = screen.x - w - m; y = cy - h / 2; }
+        else if (edge == EDGE_TOP)   { x = cx - w / 2;       y = m; }
+        else                         { x = cx - w / 2;       y = screen.y - h - m; }
+        x = Math.max(m, Math.min(x, screen.x - w - m));
+        y = Math.max(m, Math.min(y, screen.y - h - m));
         return new int[]{ x, y };
     }
 
@@ -857,6 +1009,7 @@ public class SharePasteHelper {
             Log.e(TAG, "dismiss handle failed: " + e.getMessage());
         }
         collapsedTags.remove(tag);
+        handleTapStates.remove(tag + HANDLE_SUFFIX);
         try {
             EasyFloat.showAppFloat(tag);
         } catch (Exception e) {
@@ -878,6 +1031,7 @@ public class SharePasteHelper {
         } catch (Exception ignored) {
         }
         collapsedTags.remove(tag);
+        handleTapStates.remove(tag + HANDLE_SUFFIX);
         hideOpacitySlider(tag);
         helperImageTags.remove(tag);
         try {

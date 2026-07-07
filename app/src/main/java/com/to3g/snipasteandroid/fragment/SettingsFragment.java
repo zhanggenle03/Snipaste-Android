@@ -11,19 +11,25 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.ContextThemeWrapper;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.to3g.snipasteandroid.ClipboardPasteTileService;
+import com.to3g.snipasteandroid.LogViewerActivity;
 import com.to3g.snipasteandroid.PermissionListActivity;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
 import com.to3g.snipasteandroid.databinding.FragmentSettingsBinding;
+import com.to3g.snipasteandroid.lib.AppLog;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.ScreenUtils;
+import com.to3g.snipasteandroid.lib.Settings;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 
 import com.google.android.material.switchmaterial.SwitchMaterial;
+
+import androidx.appcompat.app.AlertDialog;
 
 @Widget(group = Group.Other, name = "设置")
 public class SettingsFragment extends BaseFragment {
@@ -32,6 +38,7 @@ public class SettingsFragment extends BaseFragment {
     private SharedPreferences tilePrefs;
     private View tileStatusRow;
     private TextView tileStatusText;
+    private TextView logDetailText;
     private SharedPreferences.OnSharedPreferenceChangeListener tilePrefListener;
     private Dialog guideDialog;
 
@@ -43,8 +50,7 @@ public class SettingsFragment extends BaseFragment {
         initTopBar();
         initGeneralSection();
         initGestureSection();
-        binding.permissionButton.setOnClickListener(v ->
-                startActivity(new Intent(requireContext(), PermissionListActivity.class)));
+        initOtherSection();
         return binding.getRoot();
     }
 
@@ -53,6 +59,8 @@ public class SettingsFragment extends BaseFragment {
         super.onResume();
         // 回到设置页时按磁贴真实状态刷新文字：手动移除/添加后也能即时反映
         refreshTileStatus();
+        // 回到设置页时刷新错误日志是否有未读崩溃的提示
+        updateLogDetail();
     }
 
     @Override
@@ -91,6 +99,50 @@ public class SettingsFragment extends BaseFragment {
     private void initGeneralSection() {
         addSectionTitle(binding.settingsGeneral, getString(R.string.settings_general));
         addTileStatusItem(binding.settingsGeneral);
+        addCollapseModeItem(binding.settingsGeneral);
+    }
+
+    /**
+     * 收起形式：缩略图 / 贴边条。点击弹出单选，选择后写入 Settings，
+     * 下次收起贴图时生效（已收起的贴图保持原把手，不强制重建）。
+     */
+    private void addCollapseModeItem(ViewGroup parent) {
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_setting_chevron, parent, false);
+        ((TextView) row.findViewById(R.id.title)).setText(getString(R.string.setting_collapse_mode));
+        TextView detail = row.findViewById(R.id.detail);
+        int mode = Settings.getCollapseMode(requireContext());
+        detail.setText(mode == Settings.COLLAPSE_MODE_STRIP
+                ? getString(R.string.collapse_mode_strip)
+                : getString(R.string.collapse_mode_thumb));
+        row.setOnClickListener(v -> {
+            AppLog.d("Settings", "collapse_mode_click");
+            int cur = Settings.getCollapseMode(requireContext());
+            int checked = (cur == Settings.COLLAPSE_MODE_STRIP) ? 1 : 0;
+            // 用纯 AppCompat 弹窗主题包裹 Context 创建 AlertDialog，绕开 Material3 的 dialog overlay。
+            // 根因（vivo SDK36 实测崩溃栈）：AppTheme=Theme.Material3，其 alertDialogTheme 让弹窗套
+            // ThemeOverlay.Material3.Dialog.Alert，单选列表布局被重定向到 Material 的
+            // select_dialog_singlechoice_material，该布局引用的 M2 attr(dialogPreferredPadding 等)
+            // 在 M3 overlay 下解析失败 -> InflateException(CheckedTextView)。改包裹
+            // ContextThemeWrapper(..., R.style.AppDialogTheme) 后弹窗套 AppCompat 主题、不继承
+            // Material3 overlay，单选列表正常 inflate。视觉为 AppCompat 默认风格（朴素、跨 ROM 一致）。
+            new AlertDialog.Builder(new ContextThemeWrapper(requireContext(), R.style.AppDialogTheme))
+                    .setTitle(R.string.setting_collapse_mode)
+                    .setSingleChoiceItems(new CharSequence[]{
+                            getString(R.string.collapse_mode_thumb),
+                            getString(R.string.collapse_mode_strip)
+                    }, checked, (dialog, which) -> {
+                        AppLog.d("Settings", "collapse_mode_select which=" + which);
+                        Settings.setCollapseMode(requireContext(),
+                                which == 1 ? Settings.COLLAPSE_MODE_STRIP : Settings.COLLAPSE_MODE_THUMB);
+                        detail.setText(which == 1
+                                ? getString(R.string.collapse_mode_strip)
+                                : getString(R.string.collapse_mode_thumb));
+                        dialog.dismiss();
+                    })
+                    .setNegativeButton(R.string.cancelText, (d, w) -> d.dismiss())
+                    .show();
+        });
+        parent.addView(row);
     }
 
     /**
@@ -154,6 +206,48 @@ public class SettingsFragment extends BaseFragment {
         addSwitchItem(binding.settingsGesture, getString(R.string.setting_double_tap_opacity), true);
         addSwitchItem(binding.settingsGesture, getString(R.string.setting_drag_edge_close), true);
         addSwitchItem(binding.settingsGesture, getString(R.string.setting_pinch_zoom), true);
+    }
+
+    /** 其他：权限清单、错误日志，均以与上面一致的列表项形式呈现（不再用按钮）。 */
+    private void initOtherSection() {
+        addSectionTitle(binding.settingsOther, getString(R.string.settings_other));
+        addPermissionEntry(binding.settingsOther);
+        addLogEntry(binding.settingsOther);
+    }
+
+    /** 「权限清单」列表项：点击进入权限清单页。 */
+    private void addPermissionEntry(ViewGroup parent) {
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_setting_chevron, parent, false);
+        ((TextView) row.findViewById(R.id.title)).setText(getString(R.string.permission_list_button));
+        row.setOnClickListener(v -> {
+            AppLog.d("Settings", "permission_entry_click");
+            startActivity(new Intent(requireContext(), PermissionListActivity.class));
+        });
+        parent.addView(row);
+    }
+
+    /** 「错误日志」列表项：点击进入日志查看页；有未读崩溃时详情标红提示。 */
+    private void addLogEntry(ViewGroup parent) {
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_setting_chevron, parent, false);
+        ((TextView) row.findViewById(R.id.title)).setText(R.string.log_entry_title);
+        logDetailText = row.findViewById(R.id.detail);
+        updateLogDetail();
+        row.setOnClickListener(v -> {
+            AppLog.d("Settings", "log_entry_click");
+            startActivity(new Intent(requireContext(), LogViewerActivity.class));
+        });
+        parent.addView(row);
+    }
+
+    private void updateLogDetail() {
+        if (logDetailText == null) return;
+        if (AppLog.hasCrash()) {
+            logDetailText.setText(R.string.log_entry_detail_crash);
+            logDetailText.setTextColor(Color.parseColor("#D32F2F"));
+        } else {
+            logDetailText.setText(R.string.log_entry_detail);
+            logDetailText.setTextColor(Color.parseColor("#999999"));
+        }
     }
 
     private void addSectionTitle(ViewGroup parent, String title) {

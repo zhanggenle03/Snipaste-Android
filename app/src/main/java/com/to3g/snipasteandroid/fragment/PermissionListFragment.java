@@ -12,6 +12,7 @@ import android.widget.Toast;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
 import com.to3g.snipasteandroid.databinding.FragmentPermissionListBinding;
+import com.to3g.snipasteandroid.lib.AppLog;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 
@@ -55,12 +56,15 @@ public class PermissionListFragment extends BaseFragment {
         for (PermissionItem item : items) {
             binding.permissionListContainer.addView(createRow(item));
         }
+        AppLog.d("PermissionList", "onCreateView");
     }
 
     private View createRow(PermissionItem item) {
         View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_permission, binding.permissionListContainer, false);
         ((TextView) row.findViewById(R.id.perm_title)).setText(item.title);
         ((TextView) row.findViewById(R.id.perm_desc)).setText(item.desc);
+        // 整行可点击打开系统设置；右侧「前往设置」文字按钮同样触发
+        row.setOnClickListener(v -> openAppSettings());
         row.findViewById(R.id.perm_action).setOnClickListener(v -> openAppSettings());
         return row;
     }

@@ -10,30 +10,22 @@
         android:layout_width="match_parent"
         android:layout_height="@dimen/topbar_height"
         android:background="@color/app_color_blue"
-        app:titleTextColor="@android:color/white" />
+        app:titleTextColor="@android:color/white"
+        app:menu="@menu/menu_log_viewer" />
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fillViewport="true"
         android:background="@android:color/white">
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/log_text"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
-
-            <!-- 权限清单 + 错误日志入口：统一白色卡片 + 分隔线风格 -->
-            <LinearLayout
-                android:id="@+id/permission_list_container"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_card"
-                android:divider="@drawable/divider_horizontal"
-                android:showDividers="middle" />
-
-        </LinearLayout>
+            android:padding="16dp"
+            android:textSize="12sp"
+            android:textColor="#333333"
+            android:fontFamily="monospace"
+            android:textIsSelectable="true" />
     </ScrollView>
 </LinearLayout>
