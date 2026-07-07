@@ -5,16 +5,14 @@ import android.graphics.PorterDuff;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.core.content.ContextCompat;
 
-import com.qmuiteam.qmui.arch.QMUIFragmentActivity;
-import com.qmuiteam.qmui.widget.QMUIWindowInsetLayout;
-
-public class CustomRootView extends QMUIFragmentActivity.RootView {
+public class CustomRootView extends FrameLayout {
 
     public static final int TAB_HOME = 0;
     public static final int TAB_SETTINGS = 1;
@@ -23,7 +21,7 @@ public class CustomRootView extends QMUIFragmentActivity.RootView {
         void onTabSelected(int index);
     }
 
-    private QMUIWindowInsetLayout fragmentContainer;
+    private FrameLayout fragmentContainer;
     private LinearLayout tabHome;
     private LinearLayout tabSettings;
     private ImageView tabHomeIcon;
@@ -35,14 +33,14 @@ public class CustomRootView extends QMUIFragmentActivity.RootView {
     public CustomRootView(Context context, int fragmentContainerId) {
         super(context);
 
-        // RootView 是一个 FrameLayout，用一个竖直 LinearLayout 包裹
-        // 「内容容器(权重1) + 底部导航栏」两部分，使底部菜单常驻且内容不与其重叠。
+        // 用一个竖直 LinearLayout 包裹「内容容器(权重1) + 底部导航栏」两部分，
+        // 使底部菜单常驻且内容不与其重叠。
         LinearLayout root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        fragmentContainer = new QMUIWindowInsetLayout(context);
+        fragmentContainer = new FrameLayout(context);
         fragmentContainer.setId(fragmentContainerId);
         root.addView(fragmentContainer, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -77,7 +75,7 @@ public class CustomRootView extends QMUIFragmentActivity.RootView {
     public void setSelectedTab(int index) {
         boolean homeSelected = index == TAB_HOME;
         int selectedColor = ContextCompat.getColor(getContext(), R.color.app_color_blue);
-        int normalColor = ContextCompat.getColor(getContext(), R.color.qmui_config_color_gray_6);
+        int normalColor = ContextCompat.getColor(getContext(), R.color.app_color_gray_6);
         tabHomeIcon.setColorFilter(homeSelected ? selectedColor : normalColor, PorterDuff.Mode.SRC_IN);
         tabHomeLabel.setTextColor(homeSelected ? selectedColor : normalColor);
         tabSettingsIcon.setColorFilter(homeSelected ? normalColor : selectedColor, PorterDuff.Mode.SRC_IN);

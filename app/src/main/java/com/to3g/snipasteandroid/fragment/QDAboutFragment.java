@@ -22,8 +22,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextView;
 
-import com.qmuiteam.qmui.arch.QMUIFragment;
-import com.qmuiteam.qmui.arch.SwipeBackLayout;
+import androidx.fragment.app.Fragment;
 import com.qmuiteam.qmui.util.QMUIPackageHelper;
 import com.qmuiteam.qmui.widget.QMUITopBarLayout;
 import com.qmuiteam.qmui.widget.grouplist.QMUIGroupListView;
@@ -72,7 +71,7 @@ public class QDAboutFragment extends BaseFragment {
                         Bundle bundle = new Bundle();
                         bundle.putString(EXTRA_URL, url);
                         bundle.putString(EXTRA_TITLE, getResources().getString(R.string.about_item_homepage));
-                        QMUIFragment fragment = new QDWebExplorerFragment();
+                        Fragment fragment = new QDWebExplorerFragment();
                         fragment.setArguments(bundle);
                         startFragment(fragment);
                     }
@@ -84,7 +83,7 @@ public class QDAboutFragment extends BaseFragment {
                         Bundle bundle = new Bundle();
                         bundle.putString(EXTRA_URL, url);
                         bundle.putString(EXTRA_TITLE, getResources().getString(R.string.about_item_github));
-                        QMUIFragment fragment = new QDWebExplorerFragment();
+                        Fragment fragment = new QDWebExplorerFragment();
                         fragment.setArguments(bundle);
                         startFragment(fragment);
                     }
@@ -107,16 +106,6 @@ public class QDAboutFragment extends BaseFragment {
         });
 
         mTopBar.setTitle(getResources().getString(R.string.about_title));
-    }
-
-    @Override
-    public QMUIFragment.TransitionConfig onFetchTransitionConfig() {
-        return SCALE_TRANSITION_CONFIG;
-    }
-
-    @Override
-    protected SwipeBackLayout.ViewMoveAction dragViewMoveAction() {
-        return SwipeBackLayout.MOVE_VIEW_TOP_TO_BOTTOM;
     }
 
     @Override

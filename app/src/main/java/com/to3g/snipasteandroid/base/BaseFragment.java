@@ -1,85 +1,58 @@
-/*
- * Tencent is pleased to support the open source community by making QMUI_Android available.
- *
- * Copyright (C) 2017-2018 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the MIT License (the "License"); you may not use this file except in
- * compliance with the License. You may obtain a copy of the License at
- *
- * http://opensource.org/licenses/MIT
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.to3g.snipasteandroid.base;
 
 import android.content.Context;
-import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
 
-import com.qmuiteam.qmui.arch.QMUIFragment;
-import com.qmuiteam.qmui.arch.SwipeBackLayout;
-import com.qmuiteam.qmui.util.QMUIDisplayHelper;
-import com.qmuiteam.qmui.util.QMUIViewHelper;
-import com.qmuiteam.qmui.widget.QMUITopBar;
-import com.qmuiteam.qmui.widget.QMUITopBarLayout;
-import com.to3g.snipasteandroid.QDApplication;
-import com.to3g.snipasteandroid.QDMainActivity;
-import com.to3g.snipasteandroid.fragment.PasteFragment;
-import com.to3g.snipasteandroid.fragment.QDAboutFragment;
-import com.to3g.snipasteandroid.fragment.QDTabSegmentFixModeFragment;
+import com.to3g.snipasteandroid.fragment.QDWebExplorerFragment;
 
 /**
- * Created by cgspine on 2018/1/7.
+ * Fragment 基类（原基于 QMUI arch，现改为标准 AndroidX Fragment）。
+ * 为兼容各子 Fragment 的导航调用，这里保留 startFragment / popBackStack / onLastFragmentFinish
+ * 的方法签名；后续在「去 QMUI 控件」阶段会逐步移除这些兼容方法。
  */
-
-public abstract class BaseFragment extends QMUIFragment {
-
-    private int mBindId = -1;
-
-    public BaseFragment() {
-    }
+public abstract class BaseFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        if(QDApplication.openSkinMake){
-        }
     }
 
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
+    /**
+     * 将目标 Fragment 压入宿主 Activity 的返回栈（替代 QMUI 的 startFragment）。
+     * 使用 R.id.snipaste_demo 作为统一的 Fragment 容器。
+     */
+    protected void startFragment(@NonNull Fragment fragment) {
+        requireActivity().getSupportFragmentManager()
+                .beginTransaction()
+                .replace(R.id.snipaste_demo, fragment)
+                .addToBackStack(null)
+                .commit();
     }
 
-    @Override
-    protected int backViewInitOffset(Context context, int dragDirection, int moveEdge) {
-        if (moveEdge == SwipeBackLayout.EDGE_TOP || moveEdge == SwipeBackLayout.EDGE_BOTTOM) {
-            return 0;
-        }
-        return QMUIDisplayHelper.dp2px(context, 100);
+    /** 弹出当前 Fragment（替代 QMUI 的 popBackStack）。 */
+    protected void popBackStack() {
+        requireActivity().getSupportFragmentManager().popBackStack();
     }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-    }
-
-    @Override
+    /**
+     * 兼容方法：当该 Fragment 位于返回栈底部、用户按返回时 QMUI 会回调它来决定
+     * 下一个显示的 Fragment。迁移到 AndroidX 后由 Activity 统一管理返回栈，此方法暂不参与逻辑。
+     */
     public Object onLastFragmentFinish() {
-        return new PasteFragment();
-
+        return null;
     }
 
     protected void goToWebExplorer(@NonNull String url, @Nullable String title) {
-        Intent intent = QDMainActivity.createWebExplorerIntent(getContext(), url, title);
-        startActivity(intent);
+        Bundle args = new Bundle();
+        args.putString(QDWebExplorerFragment.EXTRA_URL, url);
+        args.putString(QDWebExplorerFragment.EXTRA_TITLE, title);
+        QDWebExplorerFragment fragment = new QDWebExplorerFragment();
+        fragment.setArguments(args);
+        startFragment(fragment);
     }
 }
