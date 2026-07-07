@@ -751,6 +751,10 @@ public class SharePasteHelper {
         }
     }
 
+    /** 关闭所有贴图的回调：由主页注册，复用主页右上角「关闭所有贴图」入口实现 */
+    private static Runnable sCloseAllCallback;
+    public static void setCloseAllCallback(Runnable cb) { sCloseAllCallback = cb; }
+
     /** 底部居中弹出操作条（收起 / 关闭 / 取消） */
     private static void showActionSheet(@NonNull String tag) {
         Activity activity = currentActivity(tag);
@@ -777,6 +781,11 @@ public class SharePasteHelper {
         if (btnClose != null) btnClose.setOnClickListener(v -> {
             dismissActionSheet(tag);
             closeSticker(tag);
+        });
+        View btnCloseAll = sheet.findViewById(R.id.btnCloseAll);
+        if (btnCloseAll != null) btnCloseAll.setOnClickListener(v -> {
+            dismissActionSheet(tag);
+            if (sCloseAllCallback != null) sCloseAllCallback.run();
         });
         if (btnCancel != null) btnCancel.setOnClickListener(v -> {
             dismissActionSheet(tag);

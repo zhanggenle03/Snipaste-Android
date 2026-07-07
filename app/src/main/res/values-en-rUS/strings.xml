@@ -20,6 +20,8 @@
     <string name="pasteSegment_tab_text">text</string>
     <string name="pasteTextButtonText">float clipboard text</string>
     <string name="pasteTextEditHint">input some text ...</string>
+    <string name="clear_text">clear</string>
+    <string name="close_all_stickers">close all stickers</string>
     <string name="paste_on_screen">float on the screen</string>
     <string name="paste_title_2">float picture</string>
     <string name="setting">settings</string>
@@ -34,4 +36,8 @@
     <string name="setting_collapse_mode">Collapse form</string>
     <string name="collapse_mode_thumb">Thumbnail</string>
     <string name="collapse_mode_strip">Edge bar</string>
+    <string name="setting_zoom_sticker">Zoom sticker</string>
+    <string name="setting_edit_sticker">Edit sticker</string>
+    <string name="zoom_action_icon">Icon control</string>
+    <string name="edit_action_double_tap">Double tap</string>
 </resources>

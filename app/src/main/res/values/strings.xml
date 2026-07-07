@@ -24,6 +24,8 @@
     <string name="pasteTextButtonText">贴剪贴板文字</string>
     <string name="pasteSectionTitle1">贴文字</string>
     <string name="pasteTextEditHint">输入文字…</string>
+    <string name="clear_text">清除</string>
+    <string name="close_all_stickers">关闭所有贴图</string>
     <string name="button_clear_text">清空</string>
     <string name="clear_all_text">关闭所有文字</string>
     <string name="paste_title_2">贴图片</string>
@@ -63,10 +65,10 @@
     <string name="tile_guide_drag">长按拖入快捷设置</string>
     <string name="tile_guide_pull_down">从屏幕顶部下滑打开快捷设置</string>
     <string name="tile_guide_close">点击任意位置关闭</string>
-    <string name="setting_double_tap_hide">双击隐藏贴图</string>
-    <string name="setting_double_tap_opacity">双击浮窗调整不透明度</string>
-    <string name="setting_drag_edge_close">拖到屏幕边缘关闭</string>
-    <string name="setting_pinch_zoom">双指缩放贴图</string>
+    <string name="setting_zoom_sticker">缩放贴图</string>
+    <string name="setting_edit_sticker">编辑贴图</string>
+    <string name="zoom_action_icon">图标控制</string>
+    <string name="edit_action_double_tap">双击</string>
     <string name="setting_collapse_mode">收起形式</string>
     <string name="collapse_mode_thumb">缩略图</string>
     <string name="collapse_mode_strip">贴边条</string>
@@ -79,8 +81,11 @@
     <string name="perm_overlay_desc">允许应用在其他应用上层显示悬浮窗</string>
     <string name="perm_camera_title">相机</string>
     <string name="perm_camera_desc">用于拍摄图片并贴到屏幕</string>
-    <string name="perm_foreground_title">前台服务</string>
-    <string name="perm_foreground_desc">保持贴图在后台持续运行</string>
+    <string name="perm_clipboard_title">剪切板</string>
+    <string name="perm_clipboard_desc">在控制中心磁贴、接收分享时读取剪切板以实现快速贴图（系统隐私记录，无需授权）</string>
+    <string name="perm_status_granted">已授权</string>
+    <string name="perm_status_denied">未授权</string>
+    <string name="perm_status_not_required">无需授权</string>
     <string name="file_access_failed">无法访问图片文件</string>
     <string name="camera_permission_denied">相机权限被拒绝，无法拍照</string>
 

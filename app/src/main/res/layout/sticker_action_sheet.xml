@@ -37,6 +37,21 @@
         android:background="#33FFFFFF" />
 
     <Button
+        android:id="@+id/btnCloseAll"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@null"
+        android:gravity="center"
+        android:text="@string/close_all_stickers"
+        android:textColor="#FF6B6B"
+        android:textSize="15sp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1px"
+        android:background="#33FFFFFF" />
+
+    <Button
         android:id="@+id/btnCancel"
         android:layout_width="match_parent"
         android:layout_height="48dp"
