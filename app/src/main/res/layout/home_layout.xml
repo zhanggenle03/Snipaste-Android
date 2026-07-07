@@ -40,18 +40,38 @@
                 android:text="@string/pasteSectionTitle1"
                 style="@style/TitleText" />
 
-            <EditText
-                android:id="@+id/editText"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:ems="10"
-                android:gravity="start|top"
-                android:hint="@string/pasteTextEditHint"
-                android:padding="6dp"
-                android:layout_margin="10dp"
-                android:background="@drawable/qmui_divider_bottom_bitmap"
-                android:maxHeight="200dp"
-                android:inputType="textMultiLine" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <EditText
+                    android:id="@+id/editText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ems="10"
+                    android:gravity="start|top"
+                    android:hint="@string/pasteTextEditHint"
+                    android:padding="6dp"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="10dp"
+                    android:background="@drawable/qmui_divider_bottom_bitmap"
+                    android:maxHeight="200dp"
+                    android:inputType="textMultiLine" />
+
+                <ImageButton
+                    android:id="@+id/clearTextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_clear_text"
+                    android:contentDescription="@string/clear_text"
+                    android:scaleType="centerInside" />
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/linearLayout2"

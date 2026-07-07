@@ -85,6 +85,7 @@ public class HomeFragment extends BaseFragment {
         binding.pasteClipboardButton.setOnClickListener(v -> onPasteClickboardButtonClick());
         binding.albumButton.setOnClickListener(v -> onAlbumButtonClick());
         binding.cameraButton.setOnClickListener(v -> onCameraButtonClick());
+        binding.clearTextButton.setOnClickListener(v -> binding.editText.setText(""));
         return binding.getRoot();
     }
 
