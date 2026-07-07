@@ -63,10 +63,10 @@
     <string name="tile_guide_drag">长按拖入快捷设置</string>
     <string name="tile_guide_pull_down">从屏幕顶部下滑打开快捷设置</string>
     <string name="tile_guide_close">点击任意位置关闭</string>
-    <string name="setting_double_tap_hide">双击隐藏贴图</string>
-    <string name="setting_double_tap_opacity">双击浮窗调整不透明度</string>
-    <string name="setting_drag_edge_close">拖到屏幕边缘关闭</string>
-    <string name="setting_pinch_zoom">双指缩放贴图</string>
+    <string name="setting_zoom_sticker">缩放贴图</string>
+    <string name="setting_edit_sticker">编辑贴图</string>
+    <string name="zoom_action_icon">图标控制</string>
+    <string name="edit_action_double_tap">双击</string>
     <string name="setting_collapse_mode">收起形式</string>
     <string name="collapse_mode_thumb">缩略图</string>
     <string name="collapse_mode_strip">贴边条</string>

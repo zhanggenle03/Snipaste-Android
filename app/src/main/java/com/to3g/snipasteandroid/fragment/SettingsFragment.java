@@ -13,7 +13,6 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.view.ContextThemeWrapper;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.to3g.snipasteandroid.ClipboardPasteTileService;
 import com.to3g.snipasteandroid.LogViewerActivity;
@@ -26,8 +25,6 @@ import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.ScreenUtils;
 import com.to3g.snipasteandroid.lib.Settings;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
-
-import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import androidx.appcompat.app.AlertDialog;
 
@@ -200,12 +197,65 @@ public class SettingsFragment extends BaseFragment {
         guideDialog = null;
     }
 
+    /** 手势类型：缩放贴图 / 编辑贴图（供 addGestureActionItem 区分选项与取值）。 */
+    private static final int GESTURE_ZOOM = 0;
+    private static final int GESTURE_EDIT = 1;
+
     private void initGestureSection() {
         addSectionTitle(binding.settingsGesture, getString(R.string.settings_gesture));
-        addSwitchItem(binding.settingsGesture, getString(R.string.setting_double_tap_hide), true);
-        addSwitchItem(binding.settingsGesture, getString(R.string.setting_double_tap_opacity), true);
-        addSwitchItem(binding.settingsGesture, getString(R.string.setting_drag_edge_close), true);
-        addSwitchItem(binding.settingsGesture, getString(R.string.setting_pinch_zoom), true);
+        addGestureActionItem(binding.settingsGesture, R.string.setting_zoom_sticker, GESTURE_ZOOM);
+        addGestureActionItem(binding.settingsGesture, R.string.setting_edit_sticker, GESTURE_EDIT);
+    }
+
+    /**
+     * 手势动作项（chevron 行）：右侧 detail 显示当前选中的动作名；点击弹单选框选择动作。
+     * 当前每个手势仅 1 个可选动作（即当前正在用的手势），后续扩充时往 options/取值映射加项即可。
+     * 弹窗用 AppCompat 主题包裹（与 addCollapseModeItem 同理，绕开 Material3 dialog overlay 崩溃）。
+     */
+    private void addGestureActionItem(ViewGroup parent, int titleRes, int gestureType) {
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_setting_chevron, parent, false);
+        ((TextView) row.findViewById(R.id.title)).setText(titleRes);
+        TextView detail = row.findViewById(R.id.detail);
+
+        // 当前选中动作（取值 -> 文案）
+        int curVal = (gestureType == GESTURE_ZOOM)
+                ? Settings.getZoomAction(requireContext())
+                : Settings.getEditAction(requireContext());
+        CharSequence[] options;
+        int checked;
+        if (gestureType == GESTURE_ZOOM) {
+            options = new CharSequence[]{getString(R.string.zoom_action_icon)};
+            checked = (curVal == Settings.ZOOM_ACTION_ICON) ? 0 : -1;
+        } else {
+            options = new CharSequence[]{getString(R.string.edit_action_double_tap)};
+            checked = (curVal == Settings.EDIT_ACTION_DOUBLE_TAP) ? 0 : -1;
+        }
+        detail.setText(checked >= 0 ? options[checked] : "");
+
+        row.setOnClickListener(v -> {
+            AppLog.d("Settings", "gesture_action_click type=" + gestureType);
+            int cur = (gestureType == GESTURE_ZOOM)
+                    ? Settings.getZoomAction(requireContext())
+                    : Settings.getEditAction(requireContext());
+            int curIndex = (gestureType == GESTURE_ZOOM)
+                    ? ((cur == Settings.ZOOM_ACTION_ICON) ? 0 : -1)
+                    : ((cur == Settings.EDIT_ACTION_DOUBLE_TAP) ? 0 : -1);
+            new AlertDialog.Builder(new ContextThemeWrapper(requireContext(), R.style.AppDialogTheme))
+                    .setTitle(titleRes)
+                    .setSingleChoiceItems(options, Math.max(curIndex, 0), (dialog, which) -> {
+                        AppLog.d("Settings", "gesture_action_select type=" + gestureType + " which=" + which);
+                        if (gestureType == GESTURE_ZOOM) {
+                            Settings.setZoomAction(requireContext(), Settings.ZOOM_ACTION_ICON);
+                        } else {
+                            Settings.setEditAction(requireContext(), Settings.EDIT_ACTION_DOUBLE_TAP);
+                        }
+                        detail.setText(options[which]);
+                        dialog.dismiss();
+                    })
+                    .setNegativeButton(R.string.cancelText, (d, w) -> d.dismiss())
+                    .show();
+        });
+        parent.addView(row);
     }
 
     /** 其他：权限清单、错误日志，均以与上面一致的列表项形式呈现（不再用按钮）。 */
@@ -259,15 +309,5 @@ public class SettingsFragment extends BaseFragment {
         int padBottom = ScreenUtils.dp2px(requireContext(), 8);
         tv.setPadding(padH, padH, 0, padBottom);
         parent.addView(tv);
-    }
-
-    private void addSwitchItem(ViewGroup parent, String title, boolean checked) {
-        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_setting_switch, parent, false);
-        ((TextView) row.findViewById(R.id.title)).setText(title);
-        SwitchMaterial sw = row.findViewById(R.id.switch_view);
-        sw.setChecked(checked);
-        sw.setOnCheckedChangeListener((buttonView, isChecked) ->
-                Toast.makeText(getContext(), title + "：" + (isChecked ? "开" : "关"), Toast.LENGTH_SHORT).show());
-        parent.addView(row);
     }
 }

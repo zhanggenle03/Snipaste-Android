@@ -30,4 +30,46 @@ public class Settings {
                 .putInt(KEY_COLLAPSE_MODE, mode)
                 .apply();
     }
+
+    // ---- 手势动作 ----
+    // 每个手势（缩放贴图 / 编辑贴图）当前仅 1 个可选动作（即当前正在用的手势），
+    // 后续扩充时往对应选项数组加项、并在 SharePasteHelper 按取值分支即可。
+
+    /** 缩放贴图：动作类型 */
+    public static final String KEY_ZOOM_ACTION = "zoom_action";
+    /** 图标控制（默认）：单指拖拽 ScaleImage 改尺寸 */
+    public static final int ZOOM_ACTION_ICON = 0;
+
+    /** 编辑贴图：动作类型 */
+    public static final String KEY_EDIT_ACTION = "edit_action";
+    /** 双击（默认）：handleFloatTouch 双击触发透明度滑块 */
+    public static final int EDIT_ACTION_DOUBLE_TAP = 0;
+
+    public static int getZoomAction(@androidx.annotation.Nullable Context context) {
+        if (context == null) return ZOOM_ACTION_ICON;
+        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .getInt(KEY_ZOOM_ACTION, ZOOM_ACTION_ICON);
+    }
+
+    public static void setZoomAction(@androidx.annotation.Nullable Context context, int action) {
+        if (context == null) return;
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putInt(KEY_ZOOM_ACTION, action)
+                .apply();
+    }
+
+    public static int getEditAction(@androidx.annotation.Nullable Context context) {
+        if (context == null) return EDIT_ACTION_DOUBLE_TAP;
+        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .getInt(KEY_EDIT_ACTION, EDIT_ACTION_DOUBLE_TAP);
+    }
+
+    public static void setEditAction(@androidx.annotation.Nullable Context context, int action) {
+        if (context == null) return;
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putInt(KEY_EDIT_ACTION, action)
+                .apply();
+    }
 }
