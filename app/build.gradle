@@ -1,17 +1,16 @@
 def qmui_arch_version = '2.0.0-alpha02'
-def javaVersion = JavaVersion.VERSION_1_8
+def javaVersion = JavaVersion.VERSION_17
 
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
-apply plugin: 'kotlin-android-extensions'
 
 android {
-    compileSdkVersion 29
-    buildToolsVersion "29.0.3"
+    namespace "com.to3g.snipasteandroid"
+    compileSdk 34
     defaultConfig {
         applicationId "com.to3g.snipasteandroid"
         minSdkVersion 24
-        targetSdkVersion 29
+        targetSdkVersion 34
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -43,6 +42,9 @@ android {
                 signingConfig signingConfigs.debug
             }
         }
+    }
+    buildFeatures {
+        viewBinding true
     }
 }
 
