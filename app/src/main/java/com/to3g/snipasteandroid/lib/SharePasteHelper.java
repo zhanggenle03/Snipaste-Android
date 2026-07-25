@@ -354,21 +354,30 @@ public class SharePasteHelper {
 
                     @Override
                     public void touchEvent(View view, MotionEvent event) {
-                        handleFloatTouch(tag, view, event);
+                        // 已自接管（见 .show() 后 setOnTouchListener + appFloatDragEnable(false)）
                     }
 
                     @Override
                     public void drag(View view, MotionEvent event) {
-                        repositionSlider(tag);
-                        applyDragOut(tag, view, event); // 拖到屏边后继续推 -> 裁切式视觉拖出
                     }
 
                     @Override
                     public void dragEnd(View view) {
-                        onStickerDragEnd(tag, view); // 拖拽结束：判断是否拖出屏幕边缘
                     }
                 })
                 .show();
+        // 自接管贴图拖动 + setOnTouchListener
+        EasyFloat.appFloatDragEnable(false, tag);
+        View firstView = EasyFloat.getAppFloatView(tag);
+        if (firstView != null) {
+            View stickerBody = firstView.findViewById(R.id.imageOutterShadow);
+            if (stickerBody != null) {
+                stickerBody.setOnTouchListener((v, event) -> {
+                    handleFloatTouch(tag, v, event);
+                    return true;
+                });
+            }
+        }
 
         helperImageTags.add(tag);
         View view = EasyFloat.getAppFloatView(tag);
@@ -631,6 +640,26 @@ public class SharePasteHelper {
     }
 
     /**
+     * 通过 tag 直连 EasyFloat 内部 AppFloatManager，直接改 WindowManager.LayoutParams（对 frameLayout 操作）。
+     * 这是真正能改窗口位置的方法——moveFloatWindow(View) 通过 getLayoutParams() 找 WM.LayoutParams
+     * 在 ParentFrameLayout 上永远找不到（它是 FrameLayout 子类，getLayoutParams 返回 FrameLayout.LayoutParams）。
+     */
+    private static void moveFloatWindowByTag(@NonNull String tag, int x, int y) {
+        try {
+            com.lzf.easyfloat.widget.appfloat.AppFloatManager afm =
+                    com.lzf.easyfloat.widget.appfloat.FloatManager.INSTANCE.getAppFloatManager(tag);
+            if (afm == null) return;
+            afm.params.x = x;
+            afm.params.y = y;
+            View frameLayout = afm.getFrameLayout();
+            if (frameLayout == null) return;
+            afm.windowManager.updateViewLayout(frameLayout, afm.params);
+        } catch (Exception e) {
+            Log.e(TAG, "moveFloatWindowByTag failed: " + e.getMessage());
+        }
+    }
+
+    /**
      * 仅收起透明度滑块浮窗（用户再次双击关闭时调用）。
      * 与 dismissOpacitySlider 的区别：这里【不】移除 sliderStickerBodies / sliderActivities /
      * sliderLayoutListeners 等贴图本体引用，因为贴图本身还活着，下次双击仍需用它们重新弹出滑块。
@@ -694,82 +723,92 @@ public class SharePasteHelper {
                 s.edgeX = 0; s.edgeY = 0;
                 s.startRawX = (int) event.getRawX();
                 s.startRawY = (int) event.getRawY();
-                int[] loc = new int[2];
-                view.getLocationOnScreen(loc);
-                s.startWinX = loc[0];
-                s.startWinY = loc[1];
-                s.winW = view.getWidth();
-                s.winH = view.getHeight();
-                view.setTranslationX(0);
-                view.setTranslationY(0);
-                break;
-            }
-            case MotionEvent.ACTION_MOVE: {
-                if (!s.inited) {
-                    // drag 回调可能比 touchEvent 的 DOWN 更早拿到事件：以当前状态作为起点基线
-                    s.inited = true;
-                    s.startRawX = (int) event.getRawX();
-                    s.startRawY = (int) event.getRawY();
+                // startWin = params.x + translation（从 AppFloatManager 直读），避免抖动
+                int tx = (int) view.getTranslationX();
+                int ty = (int) view.getTranslationY();
+                com.lzf.easyfloat.widget.appfloat.AppFloatManager afm =
+                        com.lzf.easyfloat.widget.appfloat.FloatManager.INSTANCE.getAppFloatManager(tag);
+                if (afm != null) {
+                    s.startWinX = afm.params.x + tx;
+                    s.startWinY = afm.params.y + ty;
+                } else {
                     int[] loc = new int[2];
                     view.getLocationOnScreen(loc);
                     s.startWinX = loc[0];
                     s.startWinY = loc[1];
+                }
+                s.winW = view.getWidth();
+                s.winH = view.getHeight();
+                break;
+            }
+            case MotionEvent.ACTION_MOVE: {
+                if (!s.inited) {
+                    s.inited = true;
+                    s.startRawX = (int) event.getRawX();
+                    s.startRawY = (int) event.getRawY();
+                    int tx = (int) view.getTranslationX();
+                    int ty = (int) view.getTranslationY();
+                    com.lzf.easyfloat.widget.appfloat.AppFloatManager afm2 =
+                            com.lzf.easyfloat.widget.appfloat.FloatManager.INSTANCE.getAppFloatManager(tag);
+                    if (afm2 != null) {
+                        s.startWinX = afm2.params.x + tx;
+                        s.startWinY = afm2.params.y + ty;
+                    } else {
+                        int[] loc = new int[2];
+                        view.getLocationOnScreen(loc);
+                        s.startWinX = loc[0];
+                        s.startWinY = loc[1];
+                    }
                     s.winW = view.getWidth();
                     s.winH = view.getHeight();
                 }
                 s.moved = true;
                 Point screen = screenSize();
                 if (screen.x <= 0 || screen.y <= 0 || s.winW <= 0 || s.winH <= 0) break;
-                float rawX = event.getRawX(), rawY = event.getRawY();
-                float desiredX = s.startWinX + (rawX - s.startRawX);
-                float desiredY = s.startWinY + (rawY - s.startRawY);
-                // 横向：窗口被系统夹在左/右边，手指继续推 -> 累计拖出量(正数)；否则无拖出
-                if (desiredX < 0) {
-                    s.edgeX = -1; s.overflowX = -desiredX;
-                } else if (desiredX > screen.x - s.winW) {
-                    s.edgeX = 1; s.overflowX = desiredX - (screen.x - s.winW);
-                } else {
-                    s.edgeX = 0; s.overflowX = 0;
-                }
-                // 纵向
-                if (desiredY < 0) {
-                    s.edgeY = -1; s.overflowY = -desiredY;
-                } else if (desiredY > screen.y - s.winH) {
-                    s.edgeY = 1; s.overflowY = desiredY - (screen.y - s.winH);
-                } else {
-                    s.edgeY = 0; s.overflowY = 0;
-                }
-                // 视觉裁切：把贴图内容沿吸附方向平移，超出窗口的部分被窗裁掉 -> 滑出屏幕
-                view.setTranslationX(s.edgeX * s.overflowX);
-                view.setTranslationY(s.edgeY * s.overflowY);
+                // 新视觉位置 = 起点视觉位置 + 手指位移
+                int newVisualX = s.startWinX + (int) (event.getRawX() - s.startRawX);
+                int newVisualY = s.startWinY + (int) (event.getRawY() - s.startRawY);
+                int maxX = Math.max(0, screen.x - s.winW);
+                int maxY = Math.max(0, screen.y - s.winH);
+                int newParamsX = Math.max(0, Math.min(maxX, newVisualX));
+                int newParamsY = Math.max(0, Math.min(maxY, newVisualY));
+                int newTx = newVisualX - newParamsX;
+                int newTy = newVisualY - newParamsY;
+                // 直接改 WindowManager 位置 + translation 补偿
+                moveFloatWindowByTag(tag, newParamsX, newParamsY);
+                view.setTranslationX(newTx);
+                view.setTranslationY(newTy);
+                view.invalidate();
+                s.overflowX = Math.abs(newTx);
+                s.edgeX = newTx < 0 ? -1 : (newTx > 0 ? 1 : 0);
+                s.overflowY = Math.abs(newTy);
+                s.edgeY = newTy < 0 ? -1 : (newTy > 0 ? 1 : 0);
+                break;
+            }
+            case MotionEvent.ACTION_UP: {
+                onStickerDragEnd(tag, view);
                 break;
             }
             case MotionEvent.ACTION_CANCEL:
                 s.inited = false;
                 s.overflowX = 0; s.overflowY = 0;
                 s.edgeX = 0; s.edgeY = 0;
-                view.setTranslationX(0);
-                view.setTranslationY(0);
                 break;
         }
     }
 
     /**
-     * 浮窗 dragEnd 回调中调用：若本次拖拽把贴图「裁切式」拖出屏幕达到一定程度（>= TRIGGER_RATIO * 边长 或
-     * TRIGGER_MIN_DP），则底部弹出操作条（收起 / 关闭 / 取消）。未达阈值则把贴图滑回屏幕内（清除裁切）。
-     * 轻点 / 屏幕内普通拖动均不触发，避免误弹。
+     * 贴图 drag 手势结束时（ACTION_UP）调用。
+     * **仅横向（左/右）拖出达阈值触发操作条**；纵向（上/下）不触发。
+     * 贴图固定在当前裁切位置（不清零 translation），由用户后续手势自由调整。
      */
     public static void onStickerDragEnd(@NonNull String tag, @NonNull View stickerView) {
         DragState s = dragStates.remove(tag);
         if (s == null || !s.moved) return;
-        if (EasyFloat.getAppFloatView(tag + SHEET_SUFFIX) != null) return; // 操作条已存在
+        if (EasyFloat.getAppFloatView(tag + SHEET_SUFFIX) != null) return;
         float minX = Math.max(TRIGGER_RATIO * s.winW, TRIGGER_MIN_DP * density());
-        float minY = Math.max(TRIGGER_RATIO * s.winH, TRIGGER_MIN_DP * density());
-        boolean triggered = (s.edgeX != 0 && s.overflowX >= minX)
-                || (s.edgeY != 0 && s.overflowY >= minY);
-        // 不论是否触发，先把贴图归位到屏幕边（清除裁切），避免停在屏外
-        stickerView.setTranslationX(0);
-        stickerView.setTranslationY(0);
+        boolean triggered = (s.edgeX != 0 && s.overflowX >= minX);
+        // 注意：不清零 translation——贴图固定在被裁切位置
         if (triggered) {
             showActionSheet(tag);
         }
@@ -830,12 +869,7 @@ public class SharePasteHelper {
         });
         if (btnCancel != null) btnCancel.setOnClickListener(v -> {
             dismissActionSheet(tag);
-            // 取消：清除裁切，把贴图滑回屏幕内（完整可见），避免停在屏外丢失
-            View sv = EasyFloat.getAppFloatView(tag);
-            if (sv != null) {
-                sv.setTranslationX(0);
-                sv.setTranslationY(0);
-            }
+            // 取消：贴图保持在当前裁切位置（不清零 translation），由用户后续手势自由调整
         });
     }
 

@@ -268,21 +268,31 @@ public class HomeFragment extends BaseFragment {
 
                     @Override
                     public void touchEvent(View view, MotionEvent event) {
-                        SharePasteHelper.handleFloatTouch(path, view, event);
+                        // 已自接管（见 .show() 后 setOnTouchListener + appFloatDragEnable(false)）
                     }
 
                     @Override
                     public void drag(View view, MotionEvent event) {
-                        SharePasteHelper.repositionSlider(path);
-                        SharePasteHelper.applyDragOut(path, view, event);
                     }
 
                     @Override
                     public void dragEnd(View view) {
-                        SharePasteHelper.onStickerDragEnd(path, view);
                     }
                 })
                 .show();
+        EasyFloat.appFloatDragEnable(false, path);
+        {
+            View first = EasyFloat.getAppFloatView(path);
+            if (first != null) {
+                View body = first.findViewById(R.id.imageOutterShadow);
+                if (body != null) {
+                    body.setOnTouchListener((v, e) -> {
+                        SharePasteHelper.handleFloatTouch(path, v, e);
+                        return true;
+                    });
+                }
+            }
+        }
         floatingImages.add(path);
         View view = EasyFloat.getAppFloatView(path);
         assert view != null;
@@ -350,21 +360,31 @@ public class HomeFragment extends BaseFragment {
 
                     @Override
                     public void touchEvent(View view, MotionEvent event) {
-                        SharePasteHelper.handleFloatTouch(tagName, view, event);
+                        // 已自接管（见 .show() 后 setOnTouchListener + appFloatDragEnable(false)）
                     }
 
                     @Override
                     public void drag(View view, MotionEvent event) {
-                        SharePasteHelper.repositionSlider(tagName);
-                        SharePasteHelper.applyDragOut(tagName, view, event);
                     }
 
                     @Override
                     public void dragEnd(View view) {
-                        SharePasteHelper.onStickerDragEnd(tagName, view);
                     }
                 })
                 .show();
+        EasyFloat.appFloatDragEnable(false, tagName);
+        {
+            View first = EasyFloat.getAppFloatView(tagName);
+            if (first != null) {
+                View body = first.findViewById(R.id.imageOutterShadow);
+                if (body != null) {
+                    body.setOnTouchListener((v, e) -> {
+                        SharePasteHelper.handleFloatTouch(tagName, v, e);
+                        return true;
+                    });
+                }
+            }
+        }
         floatingImages.add(tagName);
         View view = EasyFloat.getAppFloatView(tagName);
         assert view != null;
