@@ -26,6 +26,9 @@
     <string name="pasteTextEditHint">输入文字…</string>
     <string name="clear_text">清除</string>
     <string name="close_all_stickers">关闭所有贴图</string>
+    <string name="sticker_action_collapse">收起</string>
+    <string name="sticker_action_close">关闭贴图</string>
+    <string name="sticker_action_cancel">取消</string>
     <string name="button_clear_text">清空</string>
     <string name="clear_all_text">关闭所有文字</string>
     <string name="paste_title_2">贴图片</string>
