@@ -1,13 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 贴边条把手：收起贴图后在屏幕边缘显示的一条细条，点击恢复、可拖动。
-     真正的条尺寸与朝向（左右边=竖条 / 上下边=横条）由代码按停靠边动态设置到 stripBar 上。 -->
+     视觉条 stripBar 仅 12dp，靠 stripPad 在内侧透明占位扩展触摸区（24dp）。
+     Window 总宽 36dp = 12dp视觉条 + 24dp触摸扩展，让手指容易命中。
+     视觉条始终贴屏幕边，由代码按当前 dockEdge 设 gravity（LEFT/RIGHT）控制。
+     触摸扩展 stripPad 在对面一侧（与视觉条不重叠）作为透明命中区。 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content">
+    android:layout_width="36dp"
+    android:layout_height="72dp">
 
+    <!-- 透明触摸扩展区：纯透明、不响应绘制，点击/拖动事件落在它身上都会被 EasyFloat 浮窗层级继续派发 -->
+    <View
+        android:id="@+id/stripPad"
+        android:layout_width="24dp"
+        android:layout_height="72dp"
+        android:layout_gravity="end|center_vertical" />
+
+    <!-- 视觉条：12dp 厚，靠贴屏幕边的一侧。gravity 在代码里按 dockEdge 切换 LEFT/RIGHT -->
     <View
         android:id="@+id/stripBar"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="12dp"
+        android:layout_height="72dp"
+        android:layout_gravity="start|center_vertical"
         android:background="@drawable/bg_handle_strip" />
 </FrameLayout>
