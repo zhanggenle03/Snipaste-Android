@@ -294,12 +294,18 @@ public class HomeFragment extends BaseFragment {
 
         imageOutter.setBackground(Drawable.createFromPath(path));
 
+        // 缩放最小值（px），防止 onScaled 累加到 0/负数导致布局异常
+        final int minSize = getResources().getDimensionPixelSize(R.dimen.sticker_min_size);
         ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
         scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
             @Override
             public void onScaled(float x, float y, MotionEvent event) {
-                layoutParams.width = (int) (layoutParams.width + x);
-                layoutParams.height = (int) (layoutParams.height + y);
+                int newWidth = (int) (layoutParams.width + x);
+                int newHeight = (int) (layoutParams.height + y);
+                if (newWidth < minSize) newWidth = minSize;
+                if (newHeight < minSize) newHeight = minSize;
+                layoutParams.width = newWidth;
+                layoutParams.height = newHeight;
                 imageOutterShadow.setLayoutParams(layoutParams);
             }
 
@@ -372,12 +378,18 @@ public class HomeFragment extends BaseFragment {
 
         imageOutter.setBackground(new BitmapDrawable(getResources(), bitmap));
 
+        // 缩放最小值（px），防止 onScaled 累加到 0/负数导致布局异常
+        final int minSize = getResources().getDimensionPixelSize(R.dimen.sticker_min_size);
         ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
         scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
             @Override
             public void onScaled(float x, float y, MotionEvent event) {
-                layoutParams.width = (int) (layoutParams.width + x);
-                layoutParams.height = (int) (layoutParams.height + y);
+                int newWidth = (int) (layoutParams.width + x);
+                int newHeight = (int) (layoutParams.height + y);
+                if (newWidth < minSize) newWidth = minSize;
+                if (newHeight < minSize) newHeight = minSize;
+                layoutParams.width = newWidth;
+                layoutParams.height = newHeight;
                 imageOutterShadow.setLayoutParams(layoutParams);
             }
 

@@ -397,12 +397,18 @@ public class SharePasteHelper {
 
         imageOutter.setBackground(new BitmapDrawable(activity.getResources(), bitmap));
 
+        // 缩放最小值（px），防止 onScaled 累加到 0/负数导致布局异常
+        final int minSize = activity.getResources().getDimensionPixelSize(R.dimen.sticker_min_size);
         ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
         scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
             @Override
             public void onScaled(float x, float y, MotionEvent event) {
-                lp.width = (int) (lp.width + x);
-                lp.height = (int) (lp.height + y);
+                int newWidth = (int) (lp.width + x);
+                int newHeight = (int) (lp.height + y);
+                if (newWidth < minSize) newWidth = minSize;
+                if (newHeight < minSize) newHeight = minSize;
+                lp.width = newWidth;
+                lp.height = newHeight;
                 imageOutterShadow.setLayoutParams(lp);
             }
 
