@@ -11,6 +11,8 @@ import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Gravity;
@@ -20,6 +22,7 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.Toast;
@@ -53,6 +56,9 @@ public class SharePasteHelper {
 
     private static final String TAG = "SharePasteHelper";
 
+    /** 主线程 Handler：用于代替 view.post()，避免 View detach 后 Runnable 丢失 */
+    private static final Handler sMainHandler = new Handler(Looper.getMainLooper());
+
     /** 贴图 tag -> 贴图本体 View（用于计算滑块应摆放的位置） */
     private static final Map<String, View> sliderStickerBodies = new HashMap<>();
     /** 贴图 tag -> 贴在 stickerBody 上的布局监听（贴图缩放时让滑块跟随） */
@@ -69,6 +75,8 @@ public class SharePasteHelper {
     private static final long DOUBLE_TAP_TIME = 300;
     // 判定为「点击」而非「拖拽」的位移容差(px)：超过则视为拖拽，取消待定的第一次点击
     private static final int TAP_SLOP = 24;
+    // 收起把手（贴边条仅 12dp 厚）比普通浮窗更难精准点击，使用更大的容差避免手指自然晃动被误判为拖拽
+    private static final int HANDLE_TAP_SLOP = 64;
 
     /** 浮窗 touchEvent 里的双击检测状态 */
     private static class TapState {
@@ -102,6 +110,9 @@ public class SharePasteHelper {
     }
     /** 已收起(最小化)的贴图 tag，便于销毁时一并清理把手 */
     private static final Set<String> collapsedTags = new HashSet<>();
+    /** 贴图 tag -> 创建该贴图收起把手时使用的 Activity。磁贴/分享入口创建的贴图，其原 Activity 可能已 finish；
+     *  拖动把手后需要重建(贴边条模式)时，若 currentActivity 为空则回退到此引用，避免把手消失。 */
+    private static final Map<String, Activity> handleActivities = new HashMap<>();
     /** 收起把手自身的单击检测状态（与贴图本体的 tapStates 分开，把手 tag 不同于贴图 tag） */
     private static final Map<String, TapState> handleTapStates = new HashMap<>();
 
@@ -116,6 +127,8 @@ public class SharePasteHelper {
     /** 贴边条尺寸(dp)：贴向左右边时为竖条(厚 x 长)，贴向上下边时为横条(长 x 厚) */
     private static final int STRIP_THICK_DP = 12;
     private static final int STRIP_LEN_DP = 72;
+    /** 贴边条触摸扩展区(dp)：紧贴视觉条的内侧，纯透明、不绘制，仅扩大 EasyFloat 窗口的点击/拖动命中区 */
+    private static final int STRIP_TOUCH_EXT_DP = 24;
 
     private static float density() {
         return Resources.getSystem().getDisplayMetrics().density;
@@ -254,6 +267,11 @@ public class SharePasteHelper {
 
         String tag = "share_text_" + content.hashCode();
         if (EasyFloat.getAppFloatView(tag) != null) {
+            // 若该贴图已收起（把手可能已丢失），直接恢复而非仅提示"已粘贴"
+            if (collapsedTags.contains(tag)) {
+                restoreSticker(tag);
+                return;
+            }
             Toast.makeText(activity, activity.getText(R.string.textFloated), Toast.LENGTH_SHORT).show();
             return;
         }
@@ -855,6 +873,7 @@ public class SharePasteHelper {
     private static void showThumbHandle(@NonNull String tag, Rect r, @NonNull Point screen, Bitmap thumb) {
         Activity activity = currentActivity(tag);
         if (activity == null) return;
+        handleActivities.put(tag, activity);
         String handleTag = tag + HANDLE_SUFFIX;
         if (EasyFloat.getAppFloatView(handleTag) != null) return;
         // 无位置信息时(理论上不会)兜底放左下角
@@ -874,37 +893,66 @@ public class SharePasteHelper {
         if (iv != null && thumb != null) iv.setImageBitmap(thumb);
     }
 
-    /** 贴边条把手：细条贴边、点击恢复、可拖动(释放后按停靠边重建并保持朝向) */
+    /** 贴边条把手：细条贴边 + 透明触摸扩展，点击恢复、可拖动。
+     *  视觉条 stripBar 仅 12dp 始终贴屏幕边；触摸扩展 stripPad 在内侧 24dp 让 EasyFloat 整个
+     *  36dp 宽窗口都能命中点击/拖动。XML 已固定 FrameLayout=36dp×72dp(竖条)。 */
     private static void showStripHandle(@NonNull String tag, int edge, @NonNull Point screen) {
         showStripHandle(tag, edge, screen, screen.x / 2, screen.y / 2);
     }
 
     private static void showStripHandle(@NonNull String tag, int edge, @NonNull Point screen, int cx, int cy) {
+        // 贴图可能已在两次 post 之间被恢复，不再需要创建把手
+        if (!collapsedTags.contains(tag)) return;
         Activity activity = currentActivity(tag);
+        // 磁贴/分享入口创建的贴图，其原 Activity 可能已 finish；回退到创建把手时保存的有效引用
+        if (activity == null) activity = handleActivities.get(tag);
         if (activity == null) return;
+        handleActivities.put(tag, activity);
         String handleTag = tag + HANDLE_SUFFIX;
         if (EasyFloat.getAppFloatView(handleTag) != null) return;
         boolean vertical = (edge == EDGE_LEFT || edge == EDGE_RIGHT);
-        final int w = (int) ((vertical ? STRIP_THICK_DP : STRIP_LEN_DP) * density());
-        final int h = (int) ((vertical ? STRIP_LEN_DP : STRIP_THICK_DP) * density());
-        int[] pos = dockedStripPosition(edge, screen, w, h, cx, cy);
+        // 视觉条尺寸：竖条 12dp×72dp，横条 72dp×12dp
+        final int barW = (int) ((vertical ? STRIP_THICK_DP : STRIP_LEN_DP) * density());
+        final int barH = (int) ((vertical ? STRIP_LEN_DP : STRIP_THICK_DP) * density());
+        // 窗口总尺寸 = 视觉条 + 内侧触摸扩展（仅竖/横向，对应另一维度）
+        final int touchExt = (int) (STRIP_TOUCH_EXT_DP * density());
+        final int winW = vertical ? barW + touchExt : barW;
+        final int winH = vertical ? barH : barH + touchExt;
+        int[] pos = dockedStripPosition(edge, screen, winW, winH, cx, cy);
         EasyFloat.with(activity)
                 .setLayout(R.layout.image_paste_strip)
                 .setShowPattern(ShowPattern.ALL_TIME)
                 .setLocation(pos[0], pos[1])
                 .setTag(handleTag)
-                .setDragEnable(true) // 允许拖动把手（修复最小化后无法拖动）
+                .setDragEnable(true)
                 .registerCallbacks(newHandleCallbacks(tag, handleTag, true))
                 .show();
         View handle = EasyFloat.getAppFloatView(handleTag);
         if (handle == null) return;
+        // 按 edge 调整视觉条与触摸扩展的左右/上下位置，确保视觉条始终贴屏幕边
+        applyStripEdgeOrientation(handle, vertical, edge);
+    }
+
+    /** 把 stripBar 和 stripPad 按 edge 放到窗口对应边（视觉条靠屏幕边，触摸扩展开关到对侧）。 */
+    private static void applyStripEdgeOrientation(@NonNull View handle, boolean vertical, int edge) {
         View bar = handle.findViewById(R.id.stripBar);
-        if (bar != null && bar.getLayoutParams() != null) {
-            ViewGroup.LayoutParams lp = bar.getLayoutParams();
-            lp.width = w;
-            lp.height = h;
-            bar.setLayoutParams(lp);
+        View pad = handle.findViewById(R.id.stripPad);
+        if (bar == null || pad == null) return;
+        if (!(bar.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams barLp = (FrameLayout.LayoutParams) bar.getLayoutParams();
+        FrameLayout.LayoutParams padLp = (FrameLayout.LayoutParams) pad.getLayoutParams();
+        int gravityBarOnEdge, gravityPadOppositeEdge;
+        if (vertical) {
+            gravityBarOnEdge = (edge == EDGE_LEFT) ? (Gravity.LEFT | Gravity.CENTER_VERTICAL) : (Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+            gravityPadOppositeEdge = (edge == EDGE_LEFT) ? (Gravity.RIGHT | Gravity.CENTER_VERTICAL) : (Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        } else {
+            gravityBarOnEdge = (edge == EDGE_TOP) ? (Gravity.TOP | Gravity.CENTER_HORIZONTAL) : (Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            gravityPadOppositeEdge = (edge == EDGE_TOP) ? (Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL) : (Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         }
+        barLp.gravity = gravityBarOnEdge;
+        padLp.gravity = gravityPadOppositeEdge;
+        bar.setLayoutParams(barLp);
+        pad.setLayoutParams(padLp);
     }
 
     /** 统一构造收起把手的回调：轻点恢复、拖拽释放后吸附回最近边 */
@@ -921,7 +969,7 @@ public class SharePasteHelper {
             public void dismiss() { }
             @Override
             public void touchEvent(View view, MotionEvent event) {
-                handleHandleTouch(tag, handleTag, view, event);
+                handleHandleTouch(tag, handleTag, view, event, isStrip);
             }
             @Override
             public void drag(View view, MotionEvent event) { }
@@ -933,9 +981,12 @@ public class SharePasteHelper {
     }
 
     /** 收起把手的轻点判定：未发生明显移动则视为单击 -> 恢复贴图 */
-    private static void handleHandleTouch(@NonNull String tag, @NonNull String handleTag, @NonNull View view, @NonNull MotionEvent event) {
+    private static void handleHandleTouch(@NonNull String tag, @NonNull String handleTag, @NonNull View view,
+                                          @NonNull MotionEvent event, boolean isStrip) {
         TapState s = handleTapStates.get(handleTag);
         if (s == null) { s = new TapState(); handleTapStates.put(handleTag, s); }
+        // 贴边条仅 12dp 厚，手指自然晃动容易超出普通 TAP_SLOP，使用更大的把手专用容差
+        final int slop = isStrip ? HANDLE_TAP_SLOP : TAP_SLOP;
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
                 s.downX = event.getRawX();
@@ -944,7 +995,7 @@ public class SharePasteHelper {
                 break;
             case MotionEvent.ACTION_MOVE: {
                 float dist = (float) Math.hypot(event.getRawX() - s.downX, event.getRawY() - s.downY);
-                if (dist > TAP_SLOP) s.moved = true;
+                if (dist > slop) s.moved = true;
                 break;
             }
             case MotionEvent.ACTION_UP:
@@ -962,34 +1013,45 @@ public class SharePasteHelper {
         }
     }
 
-    /** 收起把手拖拽结束：吸附回最近边（缩略图直接平移；贴边条按边重建保持朝向） */
+    /** 收起把手拖拽结束：模仿缩略图——仅 moveFloatWindow 到停靠位置（保持原朝向，不 dismiss+重建） */
     private static void handleHandleDragEnd(@NonNull String tag, @NonNull String handleTag, @NonNull View view, boolean isStrip) {
         // 把手可能已在轻点时恢复(被销毁)，无需再处理
         if (EasyFloat.getAppFloatView(handleTag) == null) return;
         Point screen = screenSize();
         Rect hr = stickerRect(view);
         if (hr == null) return;
-        int edge = edgeOf(hr, screen);
-        // 把停靠/重建动作推迟到本次拖拽派发结束后再执行：在 EasyFloat 的 dragEnd 回调里同步
-        // dismiss/show 浮窗会与其触摸派发过程冲突，导致崩溃。先捕获所需值，再延后处理。
-        final String t = tag;
-        final String ht = handleTag;
         final Point sc = screen;
-        final int e = edge;
+        final String ht = handleTag;
         final int cx = hr.centerX();
         final int cy = hr.centerY();
+        final boolean verticalStrip = (hr.width() < hr.height());
+        final int thumbEdge = !isStrip ? edgeOf(hr, screen) : 0;
         view.post(() -> {
             if (EasyFloat.getAppFloatView(ht) == null) return;
+            int[] pos;
+            int targetEdge = -1;
             if (isStrip) {
-                try { EasyFloat.dismissAppFloat(ht); } catch (Exception ignored) { }
-                handleTapStates.remove(ht);
-                showStripHandle(t, e, sc, cx, cy);
+                targetEdge = verticalStrip
+                        ? (cx < sc.x / 2 ? EDGE_LEFT : EDGE_RIGHT)
+                        : (cy < sc.y / 2 ? EDGE_TOP  : EDGE_BOTTOM);
+                int barW = (int) ((verticalStrip ? STRIP_THICK_DP : STRIP_LEN_DP) * density());
+                int barH = (int) ((verticalStrip ? STRIP_LEN_DP  : STRIP_THICK_DP) * density());
+                int touchExt = (int) (STRIP_TOUCH_EXT_DP * density());
+                int winW = verticalStrip ? barW + touchExt : barW;
+                int winH = verticalStrip ? barH : barH + touchExt;
+                pos = dockedStripPosition(targetEdge, sc, winW, winH, cx, cy);
             } else {
-                int[] pos = dockedThumbPosition(e, sc,
+                pos = dockedThumbPosition(thumbEdge, sc,
                         (int) (HANDLE_W_DP * density()), (int) (HANDLE_H_DP * density()),
                         cx, cy);
-                View hv = EasyFloat.getAppFloatView(ht);
-                if (hv != null) moveFloatWindow(hv, pos[0], pos[1]);
+            }
+            View hv = EasyFloat.getAppFloatView(ht);
+            if (hv != null) {
+                moveFloatWindow(hv, pos[0], pos[1]);
+                // 停靠边变化时同步切换 stripBar / stripPad 的 gravity 让视觉条始终贴屏幕边
+                if (isStrip && targetEdge != -1) {
+                    applyStripEdgeOrientation(hv, verticalStrip, targetEdge);
+                }
             }
         });
     }
@@ -1036,6 +1098,7 @@ public class SharePasteHelper {
         }
         collapsedTags.remove(tag);
         handleTapStates.remove(tag + HANDLE_SUFFIX);
+        handleActivities.remove(tag);
         try {
             EasyFloat.showAppFloat(tag);
         } catch (Exception e) {
@@ -1058,6 +1121,7 @@ public class SharePasteHelper {
         }
         collapsedTags.remove(tag);
         handleTapStates.remove(tag + HANDLE_SUFFIX);
+        handleActivities.remove(tag);
         hideOpacitySlider(tag);
         helperImageTags.remove(tag);
         try {
