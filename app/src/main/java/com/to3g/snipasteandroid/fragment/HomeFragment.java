@@ -81,6 +81,10 @@ public class HomeFragment extends BaseFragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         binding = HomeLayoutBinding.inflate(inflater, container, false);
         initTopBar();
+        binding.helpTextView.setText(getString(R.string.helpText,
+                getString(R.string.sticker_action_collapse),
+                getString(R.string.sticker_action_close),
+                getString(R.string.sticker_action_cancel)));
         binding.pasteTextButton.setOnClickListener(v -> onPasteTextButtonClick());
         binding.pasteClipboardButton.setOnClickListener(v -> onPasteClickboardButtonClick());
         binding.albumButton.setOnClickListener(v -> onAlbumButtonClick());
