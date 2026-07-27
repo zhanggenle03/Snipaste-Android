@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.dd.ShadowLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/imageOutterShadow"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    app:sl_dx="0dp"
+    app:sl_shadowColor="#33000000"
+    app:sl_shadowRadius="4dp">
+
+    <!--
+        初始 wrap_content 让首次布局按文字自然大小确定贴图尺寸。
+        首次布局完成后，程序会将 imageOutterShadow 的 LayoutParams 设为实测尺寸，
+        使其变为显式尺寸。之后 ScaleImage 拖拽直接修改该显式尺寸，
+        match_parent 的内容自动填充。
+    -->
+    <com.to3g.snipasteandroid.view.TextStickerView
+        android:id="@+id/textStickerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <TextView
+            android:id="@+id/textContent"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#e3e3e3"
+            android:textColor="#000000"
+            android:textSize="16sp"
+            android:padding="6dp"
+            android:gravity="start" />
+
+        <com.to3g.snipasteandroid.view.ScaleImage
+            android:id="@+id/scaleImage"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="bottom|end"
+            android:src="@drawable/ic_scaleimage" />
+
+    </com.to3g.snipasteandroid.view.TextStickerView>
+
+</com.dd.ShadowLayout>

@@ -13,8 +13,10 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Build;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -25,6 +27,7 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.SeekBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -38,6 +41,7 @@ import android.view.ContextThemeWrapper;
 import com.to3g.snipasteandroid.QDApplication;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.view.ScaleImage;
+import com.to3g.snipasteandroid.view.TextStickerView;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -115,6 +119,8 @@ public class SharePasteHelper {
     private static final Map<String, Activity> handleActivities = new HashMap<>();
     /** 收起把手自身的单击检测状态（与贴图本体的 tapStates 分开，把手 tag 不同于贴图 tag） */
     private static final Map<String, TapState> handleTapStates = new HashMap<>();
+    /** 文字贴图 tag → 原始全文，用于复制到剪贴板 */
+    private static final Map<String, String> textStickerContents = new HashMap<>();
 
     // 边枚举（用于判断贴图被拖向哪条边、把手应停靠在哪条边）
     private static final int EDGE_LEFT = 0;
@@ -167,7 +173,8 @@ public class SharePasteHelper {
         return EDGE_BOTTOM;
     }
 
-    /** 从贴图本体背景生成一张缩略图（用于收起后的缩略条把手） */
+    /** 从贴图本体背景生成一张缩略图（用于收起后的缩略条把手）。
+     *  文字贴图无 Bitmap 背景，返回 null（退化为纯色条）。 */
     private static Bitmap makeThumbnail(@NonNull String tag) {
         View sv = EasyFloat.getAppFloatView(tag);
         if (sv == null) return null;
@@ -276,9 +283,9 @@ public class SharePasteHelper {
             return;
         }
 
-        // 将文字渲染为图片，复用图片贴图路径：缩放更流畅、无文字重排抖动、无多余空白
-        Bitmap textBitmap = TextBitmapUtil.create(activity, content);
-        showImageFloatWithTag(activity, textBitmap, tag, true);
+        // 文字贴图：使用 TextView（textIsSelectable=true）替代 Bitmap 渲染，
+        // 支持长按选择文字复制 + 超长文本完整显示（拖出屏幕边缘即可翻阅）。
+        showTextFloatWithTag(activity, content, tag);
     }
 
     // ---------- 图片浮窗 ----------
@@ -429,6 +436,168 @@ public class SharePasteHelper {
         // 关闭贴图不再走 X 按钮：拖出屏幕边缘 -> 底部弹出「收起/关闭」选择（见 onStickerDragEnd）。
         // 透明度滑块仍由浮窗 touchEvent -> handleFloatTouch 的双击触发。
         attachOpacitySlider(activity, tag, imageOutterShadow);
+    }
+
+    // ===================== 文字贴图（TextView 替代 Bitmap） =====================
+
+    /**
+     * 使用 {@code text_paste.xml}（含 {@link android.widget.TextView}）创建文字贴图浮窗，
+     * 替代原有的 Bitmap 渲染路径，支持：
+     * <ul>
+     *   <li>拖拽选取文字并复制（TextStickerView 自定义 dispatchDraw 高亮，不依赖系统选取引擎）</li>
+     *   <li>超长文本完整显示（拖出屏幕边缘即可翻阅）</li>
+     *   <li>双击调节透明度、拖拽移动、ScaleImage 缩放（保留原有交互）</li>
+     * </ul>
+     */
+    private static void showTextFloatWithTag(@NonNull Activity activity, @NonNull String text,
+                                             @NonNull String tag) {
+        // 保存原文供复制使用
+        textStickerContents.put(tag, text);
+
+        EasyFloat
+                .with(activity)
+                .setLayout(R.layout.text_paste)
+                .setShowPattern(ShowPattern.ALL_TIME)
+                .setLocation(100, 200)
+                .setTag(tag)
+                .registerCallbacks(new OnFloatCallbacks() {
+                    @Override
+                    public void createdResult(boolean isCreated, String msg, View view) { }
+
+                    @Override
+                    public void show(View view) { }
+
+                    @Override
+                    public void hide(View view) { }
+
+                    @Override
+                    public void dismiss() {
+                        dismissOpacitySlider(tag);
+                    }
+
+                    @Override
+                    public void touchEvent(View view, MotionEvent event) {
+                        // 已在 TextStickerView 中自接管触摸
+                    }
+
+                    @Override
+                    public void drag(View view, MotionEvent event) { }
+
+                    @Override
+                    public void dragEnd(View view) { }
+                })
+                .show();
+
+        // 禁用 EasyFloat 默认拖拽——TextStickerView 使用 onInterceptTouchEvent 自接管
+        EasyFloat.appFloatDragEnable(false, tag);
+        helperImageTags.add(tag);
+
+        View view = EasyFloat.getAppFloatView(tag);
+        if (view == null) return;
+
+        // 设置文字内容（文字选择由 TextStickerView 自定义处理）
+        View textStickerView = view.findViewById(R.id.textStickerView);
+        TextView textContent = view.findViewById(R.id.textContent);
+        if (textContent != null) {
+            textContent.setText(text);
+        }
+
+        // 关联 tag 到 TextStickerView（用于双击调起 opacity slider 等）
+        if (textStickerView instanceof TextStickerView) {
+            ((TextStickerView) textStickerView).setStickerTag(tag);
+        }
+
+        final View imageOutterShadow = view.findViewById(R.id.imageOutterShadow);
+
+        // ---------- 首次布局后固定初始尺寸 ----------
+        imageOutterShadow.getViewTreeObserver().addOnGlobalLayoutListener(
+                new ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        imageOutterShadow.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                        int w = imageOutterShadow.getMeasuredWidth();
+                        int h = imageOutterShadow.getMeasuredHeight();
+                        if (w > 0 && h > 0) {
+                            ViewGroup.LayoutParams lp = imageOutterShadow.getLayoutParams();
+                            lp.width = w;
+                            lp.height = h;
+                            imageOutterShadow.setLayoutParams(lp);
+                        }
+                    }
+                });
+
+        // ---------- 自动字号：随容器尺寸填满贴图 ----------
+        // 在 API 26+ 上启用 AutoSizeTextType，拖动右下角改变容器大小时，
+        // 字号自动调整以尽可能填满贴图（短文本放大、长文本缩小以全部显示）。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            textContent.setAutoSizeTextTypeUniformWithConfiguration(
+                    8, 72, 1, TypedValue.COMPLEX_UNIT_SP);
+        }
+
+        // ---------- 缩放：和图片一样直接改容器尺寸 ----------
+        final int minSize = activity.getResources().getDimensionPixelSize(R.dimen.sticker_min_size);
+        ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
+        scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
+            @Override
+            public void onScaled(float x, float y, MotionEvent event) {
+                ViewGroup.LayoutParams lp = imageOutterShadow.getLayoutParams();
+                int newWidth = Math.max(minSize, lp.width + (int) x);
+                int newHeight = Math.max(minSize, lp.height + (int) y);
+                lp.width = newWidth;
+                lp.height = newHeight;
+                imageOutterShadow.setLayoutParams(lp);
+                // 容器尺寸改变 → TextView match_parent 跟随 → AutoSizeText 自动调整字号
+            }
+
+            @Override
+            public void onScaleChange(float scaleFactor, float focusX, float focusY) {
+            }
+        };
+
+        // 文字选择与复制由 TextStickerView 内部处理（拖拽选字 → 自定义高亮 → 复制按钮）
+
+        // 透明度滑块（双击由 TextStickerView.onInterceptTouchEvent 触发）
+        attachOpacitySlider(activity, tag, imageOutterShadow);
+    }
+
+    /**
+     * 为文字贴图拖拽手势预初始化 DragState。
+     * <p>
+     * 由 {@link com.to3g.snipasteandroid.view.TextStickerView#initDragState} 在拦截拖拽前调用，
+     * 传入真实的手势起点坐标，使 {@link #applyDragOut} 的 ACTION_MOVE 分支能建立正确的基线，
+     * 避免因缺失 ACTION_DOWN ���致的贴图位置跳跃。
+     */
+    public static void initializeDrag(@NonNull String tag, @NonNull View stickerBody,
+                                       float startRawX, float startRawY) {
+        DragState s = dragStates.get(tag);
+        if (s == null) {
+            s = new DragState();
+            dragStates.put(tag, s);
+        }
+        s.inited = true;
+        s.moved = true;
+        s.startRawX = (int) startRawX;
+        s.startRawY = (int) startRawY;
+
+        int tx = (int) stickerBody.getTranslationX();
+        int ty = (int) stickerBody.getTranslationY();
+        com.lzf.easyfloat.widget.appfloat.AppFloatManager afm =
+                com.lzf.easyfloat.widget.appfloat.FloatManager.INSTANCE.getAppFloatManager(tag);
+        if (afm != null) {
+            s.startWinX = afm.params.x + tx;
+            s.startWinY = afm.params.y + ty;
+        } else {
+            int[] loc = new int[2];
+            stickerBody.getLocationOnScreen(loc);
+            s.startWinX = loc[0];
+            s.startWinY = loc[1];
+        }
+        s.winW = stickerBody.getWidth();
+        s.winH = stickerBody.getHeight();
+        s.overflowX = 0;
+        s.overflowY = 0;
+        s.edgeX = 0;
+        s.edgeY = 0;
     }
 
     /**
@@ -831,6 +1000,7 @@ public class SharePasteHelper {
             closeSticker(tag);
         }
         helperImageTags.clear();
+        textStickerContents.clear();
         if (sCloseAllCallback != null) sCloseAllCallback.run();
     }
 
@@ -1164,6 +1334,8 @@ public class SharePasteHelper {
         handleActivities.remove(tag);
         hideOpacitySlider(tag);
         helperImageTags.remove(tag);
+        // 清理保存的原文
+        textStickerContents.remove(tag);
         try {
             EasyFloat.dismissAppFloat(tag);
         } catch (Exception e) {

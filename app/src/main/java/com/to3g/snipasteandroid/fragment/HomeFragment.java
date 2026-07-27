@@ -34,7 +34,6 @@ import com.to3g.snipasteandroid.lib.ClipBoardUtil;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.ImageUtil;
 import com.to3g.snipasteandroid.lib.SharePasteHelper;
-import com.to3g.snipasteandroid.lib.TextBitmapUtil;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 import com.to3g.snipasteandroid.view.ScaleImage;
 
@@ -436,13 +435,8 @@ public class HomeFragment extends BaseFragment {
             Toast.makeText(getContext(), getText(R.string.blankContent), Toast.LENGTH_SHORT).show();
             return;
         }
-        String tag = "text_" + content.hashCode();
-        if (EasyFloat.getAppFloatView(tag) != null) {
-            Toast.makeText(getContext(), getText(R.string.textFloated), Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Bitmap textBitmap = TextBitmapUtil.create(getContext(), content);
-        showImageFloatByBitmap(tag, textBitmap, textBitmap.getWidth(), textBitmap.getHeight());
+        // 统一走 SharePasteHelper 路径：TextView 替代 Bitmap，支持选择复制 + 超长文本
+        SharePasteHelper.showFloatText(requireActivity(), content);
     }
 
     private void floatText(String content) {
