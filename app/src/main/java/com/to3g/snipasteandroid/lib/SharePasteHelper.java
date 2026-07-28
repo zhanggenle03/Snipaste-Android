@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
@@ -174,20 +175,38 @@ public class SharePasteHelper {
     }
 
     /** 从贴图本体背景生成一张缩略图（用于收起后的缩略条把手）。
-     *  文字贴图无 Bitmap 背景，返回 null（退化为纯色条）。 */
+     *  文字贴图无 Bitmap 背景，则直接渲染 ShadowLayout 视图内容到 Bitmap。 */
     private static Bitmap makeThumbnail(@NonNull String tag) {
         View sv = EasyFloat.getAppFloatView(tag);
         if (sv == null) return null;
         View imageOutter = sv.findViewById(R.id.imageOutter);
-        if (imageOutter == null) return null;
-        Drawable d = imageOutter.getBackground();
-        Bitmap src = (d instanceof BitmapDrawable) ? ((BitmapDrawable) d).getBitmap() : null;
-        if (src == null || src.isRecycled()) return null;
-        int th = (int) (HANDLE_H_DP * density());
-        float ar = (float) src.getWidth() / src.getHeight();
-        int tw = Math.max(1, Math.round(th * ar));
-        tw = Math.min(tw, (int) (HANDLE_W_DP * 2 * density())); // 限制最大宽度，避免极宽图
-        return Bitmap.createScaledBitmap(src, tw, th, true);
+        if (imageOutter != null) {
+            // 图片贴图：从 imageOutter 背景取 Bitmap
+            Drawable d = imageOutter.getBackground();
+            Bitmap src = (d instanceof BitmapDrawable) ? ((BitmapDrawable) d).getBitmap() : null;
+            if (src != null && !src.isRecycled()) {
+                int th = (int) (HANDLE_H_DP * density());
+                float ar = (float) src.getWidth() / src.getHeight();
+                int tw = Math.max(1, Math.round(th * ar));
+                tw = Math.min(tw, (int) (HANDLE_W_DP * 2 * density()));
+                return Bitmap.createScaledBitmap(src, tw, th, true);
+            }
+        }
+        // 文字贴图：没有 imageOutter，直接渲染 ShadowLayout 内容到缩略图
+        View shadowLayout = sv.findViewById(R.id.imageOutterShadow);
+        if (shadowLayout != null && shadowLayout.getWidth() > 0 && shadowLayout.getHeight() > 0) {
+            int th = (int) (HANDLE_H_DP * density());
+            float ar = (float) shadowLayout.getWidth() / shadowLayout.getHeight();
+            int tw = Math.max(1, Math.round(th * ar));
+            tw = Math.min(tw, (int) (HANDLE_W_DP * 2 * density()));
+            Bitmap bitmap = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            canvas.scale((float) tw / shadowLayout.getWidth(), (float) th / shadowLayout.getHeight());
+            shadowLayout.draw(canvas);
+            shadowLayout.invalidate();
+            return bitmap;
+        }
+        return null;
     }
 
 
@@ -1065,6 +1084,8 @@ public class SharePasteHelper {
     private static void collapseSticker(@NonNull String tag, Rect r, @NonNull Point screen, int edge) {
         dismissActionSheet(tag);
         hideOpacitySlider(tag); // 收起时一并收起透明度滑块
+        // 先截缩略图再隐藏（文字贴图需要可见状态才能渲染到 Bitmap）
+        Bitmap thumb = makeThumbnail(tag);
         try {
             EasyFloat.hideAppFloat(tag);
         } catch (Exception e) {
@@ -1078,7 +1099,7 @@ public class SharePasteHelper {
             int cy = (r != null) ? r.centerY() : screen.y / 2;
             showStripHandle(tag, edge, screen, cx, cy);
         } else {
-            showThumbHandle(tag, r, screen, makeThumbnail(tag));
+            showThumbHandle(tag, r, screen, thumb);
         }
     }
 
