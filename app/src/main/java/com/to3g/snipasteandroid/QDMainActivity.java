@@ -1,6 +1,7 @@
 package com.to3g.snipasteandroid;
 
 import android.os.Bundle;
+import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -25,6 +26,8 @@ public class QDMainActivity extends BaseFragmentActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 输入法弹出时使用 adjustPan，窗口整体上移使输入框可见，底部菜单栏不随窗口缩短上移
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
         if (savedInstanceState != null) {
             mCurrentTab = savedInstanceState.getInt(KEY_CURRENT_TAB, CustomRootView.TAB_HOME);
         }
