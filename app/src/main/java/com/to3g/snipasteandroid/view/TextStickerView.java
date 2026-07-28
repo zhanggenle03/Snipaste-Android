@@ -138,6 +138,12 @@ public class TextStickerView extends FrameLayout {
             hasSelection = false;
             updateBtn();
             positionHandles();
+            // 按住时直接用手指位置显示放大镜（转为 textView 相对坐标）
+            if (textMagnifier != null && textView != null) {
+                float tvX = downX - textView.getLeft();
+                float tvY = downY - textView.getTop();
+                textMagnifier.show(tvX, tvY);
+            }
             invalidate();
             return true;
         }
@@ -177,6 +183,10 @@ public class TextStickerView extends FrameLayout {
     private boolean onUp(MotionEvent e) {
         removeCallbacks(longPressRunnable);
         if (gesture == GESTURE_DRAG) finishDrag(e);
+        // 选择模式下松手 -> 隐藏放大镜（手柄拖拽松手由 HandleDragListener.onDragEnd 自行隐藏）
+        if (selectMode && !isDraggingHandle) {
+            dismissMagnifier();
+        }
         gesture = GESTURE_NONE; isDraggingHandle = false;
         return true;
     }
@@ -266,6 +276,9 @@ public class TextStickerView extends FrameLayout {
             int[] parentLoc = new int[2];
             TextStickerView.this.getLocationOnScreen(parentLoc);
             float targetX = rawX - parentLoc[0] - target.getWidth() / 2f;
+            // 限制手柄不超出贴图左右边界
+            float maxX = TextStickerView.this.getWidth() - target.getWidth();
+            targetX = Math.max(0, Math.min(targetX, maxX));
             target.setX(targetX);
 
             // 手柄 Y 保持在字符所在行下方
@@ -275,8 +288,11 @@ public class TextStickerView extends FrameLayout {
             float padT = textView.getTotalPaddingTop();
             target.setY(textView.getTop() + padT + lineBottom);
 
-            // 4. 更新放大镜
-            showMagnifier();
+            // 4. 更新放大镜：直接用手指位置（相对于 textView），
+            //    让放大镜精确显示手指下按住的文字，避免字符偏移导致的"差一位"
+            if (textMagnifier != null) {
+                textMagnifier.show(tvX, tvY);
+            }
             invalidate();
             updateBtn();
         }
@@ -430,6 +446,7 @@ public class TextStickerView extends FrameLayout {
 
     private void clearSelection() {
         selStart = -1; selEnd = -1; hasSelection = false;
+        dismissMagnifier(); // 退出选择/清选区时一并隐藏放大镜
         if (actionBtn != null) actionBtn.setVisibility(GONE);
         if (handlesCreated) {
             handleStart.setVisibility(GONE);
