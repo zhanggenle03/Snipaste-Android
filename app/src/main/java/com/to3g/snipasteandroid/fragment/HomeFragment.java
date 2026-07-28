@@ -34,7 +34,6 @@ import com.to3g.snipasteandroid.lib.ClipBoardUtil;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.ImageUtil;
 import com.to3g.snipasteandroid.lib.SharePasteHelper;
-import com.to3g.snipasteandroid.lib.TextBitmapUtil;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 import com.to3g.snipasteandroid.view.ScaleImage;
 
@@ -81,6 +80,10 @@ public class HomeFragment extends BaseFragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         binding = HomeLayoutBinding.inflate(inflater, container, false);
         initTopBar();
+        binding.helpTextView.setText(getString(R.string.helpText,
+                getString(R.string.sticker_action_collapse),
+                getString(R.string.sticker_action_close),
+                getString(R.string.sticker_action_cancel)));
         binding.pasteTextButton.setOnClickListener(v -> onPasteTextButtonClick());
         binding.pasteClipboardButton.setOnClickListener(v -> onPasteClickboardButtonClick());
         binding.albumButton.setOnClickListener(v -> onAlbumButtonClick());
@@ -264,21 +267,31 @@ public class HomeFragment extends BaseFragment {
 
                     @Override
                     public void touchEvent(View view, MotionEvent event) {
-                        SharePasteHelper.handleFloatTouch(path, view, event);
+                        // 已自接管（见 .show() 后 setOnTouchListener + appFloatDragEnable(false)）
                     }
 
                     @Override
                     public void drag(View view, MotionEvent event) {
-                        SharePasteHelper.repositionSlider(path);
-                        SharePasteHelper.applyDragOut(path, view, event);
                     }
 
                     @Override
                     public void dragEnd(View view) {
-                        SharePasteHelper.onStickerDragEnd(path, view);
                     }
                 })
                 .show();
+        EasyFloat.appFloatDragEnable(false, path);
+        {
+            View first = EasyFloat.getAppFloatView(path);
+            if (first != null) {
+                View body = first.findViewById(R.id.imageOutterShadow);
+                if (body != null) {
+                    body.setOnTouchListener((v, e) -> {
+                        SharePasteHelper.handleFloatTouch(path, v, e);
+                        return true;
+                    });
+                }
+            }
+        }
         floatingImages.add(path);
         View view = EasyFloat.getAppFloatView(path);
         assert view != null;
@@ -290,12 +303,18 @@ public class HomeFragment extends BaseFragment {
 
         imageOutter.setBackground(Drawable.createFromPath(path));
 
+        // 缩放最小值（px），防止 onScaled 累加到 0/负数导致布局异常
+        final int minSize = getResources().getDimensionPixelSize(R.dimen.sticker_min_size);
         ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
         scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
             @Override
             public void onScaled(float x, float y, MotionEvent event) {
-                layoutParams.width = (int) (layoutParams.width + x);
-                layoutParams.height = (int) (layoutParams.height + y);
+                int newWidth = (int) (layoutParams.width + x);
+                int newHeight = (int) (layoutParams.height + y);
+                if (newWidth < minSize) newWidth = minSize;
+                if (newHeight < minSize) newHeight = minSize;
+                layoutParams.width = newWidth;
+                layoutParams.height = newHeight;
                 imageOutterShadow.setLayoutParams(layoutParams);
             }
 
@@ -340,21 +359,31 @@ public class HomeFragment extends BaseFragment {
 
                     @Override
                     public void touchEvent(View view, MotionEvent event) {
-                        SharePasteHelper.handleFloatTouch(tagName, view, event);
+                        // 已自接管（见 .show() 后 setOnTouchListener + appFloatDragEnable(false)）
                     }
 
                     @Override
                     public void drag(View view, MotionEvent event) {
-                        SharePasteHelper.repositionSlider(tagName);
-                        SharePasteHelper.applyDragOut(tagName, view, event);
                     }
 
                     @Override
                     public void dragEnd(View view) {
-                        SharePasteHelper.onStickerDragEnd(tagName, view);
                     }
                 })
                 .show();
+        EasyFloat.appFloatDragEnable(false, tagName);
+        {
+            View first = EasyFloat.getAppFloatView(tagName);
+            if (first != null) {
+                View body = first.findViewById(R.id.imageOutterShadow);
+                if (body != null) {
+                    body.setOnTouchListener((v, e) -> {
+                        SharePasteHelper.handleFloatTouch(tagName, v, e);
+                        return true;
+                    });
+                }
+            }
+        }
         floatingImages.add(tagName);
         View view = EasyFloat.getAppFloatView(tagName);
         assert view != null;
@@ -368,12 +397,18 @@ public class HomeFragment extends BaseFragment {
 
         imageOutter.setBackground(new BitmapDrawable(getResources(), bitmap));
 
+        // 缩放最小值（px），防止 onScaled 累加到 0/负数导致布局异常
+        final int minSize = getResources().getDimensionPixelSize(R.dimen.sticker_min_size);
         ScaleImage scaleImage = view.findViewById(R.id.scaleImage);
         scaleImage.onScaledListener = new ScaleImage.OnScaledListener() {
             @Override
             public void onScaled(float x, float y, MotionEvent event) {
-                layoutParams.width = (int) (layoutParams.width + x);
-                layoutParams.height = (int) (layoutParams.height + y);
+                int newWidth = (int) (layoutParams.width + x);
+                int newHeight = (int) (layoutParams.height + y);
+                if (newWidth < minSize) newWidth = minSize;
+                if (newHeight < minSize) newHeight = minSize;
+                layoutParams.width = newWidth;
+                layoutParams.height = newHeight;
                 imageOutterShadow.setLayoutParams(layoutParams);
             }
 
@@ -400,13 +435,8 @@ public class HomeFragment extends BaseFragment {
             Toast.makeText(getContext(), getText(R.string.blankContent), Toast.LENGTH_SHORT).show();
             return;
         }
-        String tag = "text_" + content.hashCode();
-        if (EasyFloat.getAppFloatView(tag) != null) {
-            Toast.makeText(getContext(), getText(R.string.textFloated), Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Bitmap textBitmap = TextBitmapUtil.create(getContext(), content);
-        showImageFloatByBitmap(tag, textBitmap, textBitmap.getWidth(), textBitmap.getHeight());
+        // 统一走 SharePasteHelper 路径：TextView 替代 Bitmap，支持选择复制 + 超长文本
+        SharePasteHelper.showFloatText(requireActivity(), content);
     }
 
     private void floatText(String content) {

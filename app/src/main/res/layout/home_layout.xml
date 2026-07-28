@@ -129,6 +129,7 @@
                 style="@style/TitleText" />
 
             <TextView
+                android:id="@+id/helpTextView"
                 android:text="@string/helpText"
                 android:layout_margin="10dp"
                 android:textColor="#999999"

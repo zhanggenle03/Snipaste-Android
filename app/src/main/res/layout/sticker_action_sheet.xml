@@ -12,7 +12,7 @@
         android:layout_height="48dp"
         android:background="@null"
         android:gravity="center"
-        android:text="收起（最小化到边缘）"
+        android:text="@string/sticker_action_collapse"
         android:textColor="#FFFFFF"
         android:textSize="15sp" />
 
@@ -27,7 +27,7 @@
         android:layout_height="48dp"
         android:background="@null"
         android:gravity="center"
-        android:text="关闭贴图"
+        android:text="@string/sticker_action_close"
         android:textColor="#FF6B6B"
         android:textSize="15sp" />
 
@@ -57,7 +57,7 @@
         android:layout_height="48dp"
         android:background="@null"
         android:gravity="center"
-        android:text="取消"
+        android:text="@string/sticker_action_cancel"
         android:textColor="#AAAAAA"
         android:textSize="15sp" />
 </LinearLayout>
