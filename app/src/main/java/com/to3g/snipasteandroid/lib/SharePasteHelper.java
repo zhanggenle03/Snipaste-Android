@@ -968,8 +968,8 @@ public class SharePasteHelper {
 
     /**
      * 贴图 drag 手势结束时（ACTION_UP）调用。
-     * **仅横向（左/右）拖出达阈值触发操作条**；纵向（上/下）不触发。
-     * 贴图固定在当前裁切位置（不清零 translation），由用户后续手势自由调整。
+     * **横向（左/右）拖出达阈值**：弹出操作条，同时清除裁切偏移使贴图回弹到屏幕内完整可见；
+     * **纵向（上/下）**：不触发操作条，贴图固定在被裁切位置。
      */
     public static void onStickerDragEnd(@NonNull String tag, @NonNull View stickerView) {
         DragState s = dragStates.remove(tag);
@@ -977,10 +977,13 @@ public class SharePasteHelper {
         if (EasyFloat.getAppFloatView(tag + SHEET_SUFFIX) != null) return;
         float minX = Math.max(TRIGGER_RATIO * s.winW, TRIGGER_MIN_DP * density());
         boolean triggered = (s.edgeX != 0 && s.overflowX >= minX);
-        // 注意：不清零 translation——贴图固定在被裁切位置
         if (triggered) {
             showActionSheet(tag);
+            // 横向拖出松手后回弹：清除裁切偏移，贴图回到窗口约束位置（已在屏幕内）
+            stickerView.setTranslationX(0);
+            stickerView.setTranslationY(0);
         }
+        // 纵向：不做任何处理，贴图保持在裁切位置
     }
 
     /** 关闭所有贴图的回调：由主页注册，复用主页右上角「关闭所有贴图」入口实现。
