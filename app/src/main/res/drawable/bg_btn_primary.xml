@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 主操作按钮：实底蓝 + 白字 -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33FFFFFF">
+    <item>
+        <shape>
+            <solid android:color="@color/app_color_blue" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+</ripple>

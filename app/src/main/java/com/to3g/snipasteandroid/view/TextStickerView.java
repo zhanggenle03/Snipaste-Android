@@ -4,7 +4,9 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.text.Layout;
 import android.util.AttributeSet;
@@ -12,6 +14,7 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.Magnifier;
@@ -21,6 +24,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.dd.ShadowLayout;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.lib.SharePasteHelper;
 
@@ -60,12 +64,18 @@ public class TextStickerView extends FrameLayout {
     private SelectionHandleView handleEnd;
     private boolean handlesCreated = false;
 
+    // 选择模式时贴图底部为手柄预留的透明空间（dp）。
+    // 手柄高 = 22(水滴) + 14(触摸) + 6 = 42dp，留 4dp 余量。
+    private static final int HANDLE_SPACE_DP = 46;
+    private boolean spaceExpanded = false;
+
     // 拖拽手柄时的目标
     private boolean dragTargetIsStart = false;
     private boolean isDraggingHandle = false;
 
     // ===================== 系统放大镜（API 28+） =====================
     private Magnifier textMagnifier;
+    private float lastMagX = Float.MAX_VALUE, lastMagY = Float.MAX_VALUE;
 
     // ===================== 按钮 =====================
     private Button actionBtn;
@@ -80,6 +90,18 @@ public class TextStickerView extends FrameLayout {
     }
     public TextStickerView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr); selPaint = initSelPaint();
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        // 手柄保持在文字行下方（尖点朝上），选中最后一行时会超出贴图底部，
+        // 逐层关闭父容器裁剪，让越界部分直接绘制在贴图外，保证始终可见、可触摸。
+        setClipChildren(false);
+        ViewParent p = getParent();
+        while (p instanceof ViewGroup) {
+            ((ViewGroup) p).setClipChildren(false);
+            p = p.getParent();
+        }
     }
 
     private Paint initSelPaint() {
@@ -198,6 +220,8 @@ public class TextStickerView extends FrameLayout {
         int off = charAt(downX, downY);
         selStart = off; selEnd = off; hasSelection = false;
         ensureHandles();
+        // 贴图底部预留手柄空间（文字区不变，新增透明留白），随后重新布局完成再定位手柄
+        expandSpaceForHandles();
         positionHandles();
         updateBtn();
         invalidate();
@@ -249,6 +273,7 @@ public class TextStickerView extends FrameLayout {
         @Override public void onDragStart(boolean isStart) {
             isDraggingHandle = true;
             dragTargetIsStart = isStart;
+            lastMagX = lastMagY = Float.MAX_VALUE; // 强制本次拖拽首帧刷新放大镜
             showMagnifier();
         }
 
@@ -271,28 +296,20 @@ public class TextStickerView extends FrameLayout {
             }
             hasSelection = Math.abs(selStart - selEnd) > 0;
 
-            // 3. 手柄直接跟随手指（不 snap 到字符位置，避免一顿一顿）
+            // 3. 手柄 X 直接跟随手指（不 snap 到字符位置，避免一顿一顿），
+            //    并限制在贴图左右边界内；Y 贴字符所在行下方，顶出屏幕时自动上移
             SelectionHandleView target = isStart ? handleStart : handleEnd;
             int[] parentLoc = new int[2];
             TextStickerView.this.getLocationOnScreen(parentLoc);
-            float targetX = rawX - parentLoc[0] - target.getWidth() / 2f;
-            // 限制手柄不超出贴图左右边界
-            float maxX = TextStickerView.this.getWidth() - target.getWidth();
-            targetX = Math.max(0, Math.min(targetX, maxX));
-            target.setX(targetX);
+            placeHandleX(target, rawX - parentLoc[0] - target.getWidth() / 2f);
 
-            // 手柄 Y 保持在字符所在行下方
             Layout layout = textView.getLayout();
             int line = layout.getLineForOffset(newOff);
-            float lineBottom = layout.getLineBottom(line);
-            float padT = textView.getTotalPaddingTop();
-            target.setY(textView.getTop() + padT + lineBottom);
+            placeHandleY(target, line);
 
-            // 4. 更新放大镜：直接用手指位置（相对于 textView），
-            //    让放大镜精确显示手指下按住的文字，避免字符偏移导致的"差一位"
-            if (textMagnifier != null) {
-                textMagnifier.show(tvX, tvY);
-            }
+            // 4. 更新放大镜：跟随手柄指向的字符（手柄跟随手指、放大镜不跟随手指），
+            //    放大镜固定在手柄尖端所指字符的放大位置，避免拖拽时画面乱跳
+            showMagnifier();
             invalidate();
             updateBtn();
         }
@@ -303,26 +320,45 @@ public class TextStickerView extends FrameLayout {
         }
     }
 
-    /** 更新系统放大镜位置 */
+    /**
+     * 更新系统放大镜位置。
+     * 拖拽中：放大镜中心 = 手柄尖端坐标（与手柄完全重合，杜绝字符偏差；
+     * 手柄尖端 X 跟随手指、Y 吸附字符行，选区逻辑仍按字符 offset 走）。
+     * 非拖拽（手指滑动选择/长按）：放大镜 = 选区末尾字符中心。
+     */
     private void showMagnifier() {
         if (textMagnifier == null || textView == null || textView.getLayout() == null) return;
-        int offset = dragTargetIsStart
-                ? Math.min(selStart, selEnd)
-                : Math.max(selStart, selEnd) - 1;
-        if (offset < 0) offset = 0;
-        if (offset >= textView.getText().length()) offset = textView.getText().length() - 1;
 
-        Layout layout = textView.getLayout();
-        int line = layout.getLineForOffset(offset);
-        float x = layout.getPrimaryHorizontal(offset);
-        float y = layout.getLineBottom(line);
-        // 转为 textView 相对坐标（加 padding）
-        float sx = x + textView.getTotalPaddingLeft();
-        float sy = y + textView.getTotalPaddingTop();
+        float sx, sy;
+        if (isDraggingHandle) {
+            SelectionHandleView target = dragTargetIsStart ? handleStart : handleEnd;
+            // 手柄尖端 = 手柄 view 顶部中心（倒水滴尖点），转 textView 相对坐标
+            sx = target.getX() + target.getWidth() / 2f - textView.getLeft();
+            sy = target.getY() - textView.getTop();
+        } else {
+            int len = textView.getText().length();
+            if (len == 0) return;
+            int offset = Math.max(selStart, selEnd) - 1;
+            if (offset < 0) offset = 0;
+            if (offset >= len) offset = len - 1;
+            Layout layout = textView.getLayout();
+            int line = layout.getLineForOffset(offset);
+            // 字符中心（x 取左右缘中点、y 取行垂直中线）
+            float xStart = layout.getPrimaryHorizontal(offset);
+            float xEnd = layout.getPrimaryHorizontal(Math.min(offset + 1, len));
+            sx = (xStart + xEnd) / 2f + textView.getTotalPaddingLeft();
+            sy = (layout.getLineTop(line) + layout.getLineBottom(line)) / 2f
+                    + textView.getTotalPaddingTop();
+        }
+
+        // 位置几乎未变 → 跳过，避免拖拽/滑动时放大镜无谓刷新造成卡顿
+        if (Math.abs(sx - lastMagX) < 0.5f && Math.abs(sy - lastMagY) < 0.5f) return;
+        lastMagX = sx; lastMagY = sy;
         textMagnifier.show(sx, sy);
     }
 
     private void dismissMagnifier() {
+        lastMagX = lastMagY = Float.MAX_VALUE;
         if (textMagnifier != null) textMagnifier.dismiss();
     }
 
@@ -344,25 +380,151 @@ public class TextStickerView extends FrameLayout {
         handleEnd.setVisibility(show ? VISIBLE : GONE);
         if (!show) return;
 
-        // 起点手柄：在第一个字符下方
+        // 起点手柄：在第一个字符下方（越界部分绘制在贴图外，顶出屏幕时自动上移）
         int sLine = layout.getLineForOffset(s);
-        float sX = layout.getPrimaryHorizontal(s);
-        float sY = layout.getLineBottom(sLine);
-        float padL = textView.getTotalPaddingLeft();
-        float padT = textView.getTotalPaddingTop();
-        handleStart.setX(textView.getLeft() + padL + sX - handleStart.getWidth() / 2f);
-        handleStart.setY(textView.getTop() + padT + sY);
+        placeHandleX(handleStart, textView.getLeft() + textView.getTotalPaddingLeft()
+                + layout.getPrimaryHorizontal(s) - handleStart.getWidth() / 2f);
+        placeHandleY(handleStart, sLine);
 
-        // 终点手柄：在最后一个字符下方
+        // 终点手柄：在最后一个字符下方（越界部分绘制在贴图外，顶出屏幕时自动上移）
         int lastOff = Math.max(0, e - 1);
         int eLine = layout.getLineForOffset(lastOff);
-        float eX = layout.getPrimaryHorizontal(lastOff);
-        float eY = layout.getLineBottom(eLine);
-        handleEnd.setX(textView.getLeft() + padL + eX - handleEnd.getWidth() / 2f);
-        handleEnd.setY(textView.getTop() + padT + eY);
+        placeHandleX(handleEnd, textView.getLeft() + textView.getTotalPaddingLeft()
+                + layout.getPrimaryHorizontal(lastOff) - handleEnd.getWidth() / 2f);
+        placeHandleY(handleEnd, eLine);
 
         // 更新放大镜信息
         showMagnifier();
+    }
+
+    /**
+     * 手柄 X 定位：限制在贴图左右边界内。
+     *
+     * @param desiredCenterX 期望的手柄中心 X（TextStickerView 局部坐标）
+     */
+    private void placeHandleX(SelectionHandleView handle, float desiredCenterX) {
+        float maxX = getWidth() - handle.getWidth();
+        handle.setX(Math.max(0, Math.min(desiredCenterX, maxX)));
+    }
+
+    /**
+     * 手柄 Y 定位：始终放在字符所在行下方（尖点朝上指向文字），不翻转。
+     * 坐标只依赖 TextView（textView.getTop + padding + lineBottom），
+     * 不依赖容器高度时序；选择模式时容器底部已预留 {@link #HANDLE_SPACE_DP}
+     * 透明留白，手柄必然落在贴图内部。
+     */
+    private void placeHandleY(SelectionHandleView handle, int line) {
+        if (textView.getLayout() == null) return;
+        Layout layout = textView.getLayout();
+        float lineBottom = textView.getTop() + textView.getTotalPaddingTop()
+                + layout.getLineBottom(line);
+        handle.setY(lineBottom);
+    }
+
+    // ===================== 选择模式贴图底部留白 =====================
+
+    // 进入选择模式前 TextView 的 LayoutParams 高度（用于退出时恢复 match_parent）
+    private int savedTvHeight = -1;
+    private ShadowLayout shadowHost;
+
+    /**
+     * 进入选择模式：贴图底部预留手柄空间。
+     * <p>
+     * 实现要点（避免 shadow-layout 的阴影位图干扰）：
+     * 1. TextView 高度锁定为当前 px —— 容器长高后 match_parent 不会拉长灰色背景，
+     *    AutoSizeText 也不会因高度变化跳动字号；
+     * 2. 父容器 imageOutterShadow 若是显式尺寸则同步长高（wrap 阶段 TextStickerView
+     *    会因 padding 撑高容器），保证窗口/容器容纳手柄；
+     * 3. 长高期间把 ShadowLayout 的阴影背景换成透明占位，并关闭 onSizeChanged 重建，
+     *    防止阴影位图被拉伸/重建到新增区域产生黑色遮罩。
+     * 容器尺寸变化是异步布局的，注册一次性 onLayoutChange，重排完成后重新定位手柄。
+     */
+    private void expandSpaceForHandles() {
+        if (spaceExpanded) return;
+        spaceExpanded = true;
+        final int space = (int) (HANDLE_SPACE_DP * getResources().getDisplayMetrics().density);
+
+        // 1. 锁定 TextView 高度
+        if (textView != null && textView.getHeight() > 0) {
+            ViewGroup.LayoutParams tvLp = textView.getLayoutParams();
+            if (tvLp != null && tvLp.height == ViewGroup.LayoutParams.MATCH_PARENT) {
+                savedTvHeight = textView.getHeight();
+                tvLp.height = savedTvHeight;
+                textView.setLayoutParams(tvLp);
+            }
+        }
+
+        // 2. 父容器长高（显式尺寸时）
+        View parent = (View) getParent();
+        if (parent != null) {
+            ViewGroup.LayoutParams lp = parent.getLayoutParams();
+            if (lp != null && lp.height > 0) {
+                lp.height += space;
+                parent.setLayoutParams(lp);
+            }
+        }
+
+        // 3. 长高期间屏蔽 ShadowLayout 阴影背景（透明占位 + 禁止重建）
+        disableShadowDuringSelect();
+
+        // 4. 等容器按新尺寸重新布局后再定位手柄（此刻 getHeight() 仍是旧值）
+        addOnLayoutChangeListener(new OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v, int l, int t, int r, int b,
+                                       int ol, int ot, int or, int ob) {
+                v.removeOnLayoutChangeListener(this);
+                positionHandles();
+            }
+        });
+    }
+
+    /** 退出选择模式：移除贴图底部预留空间，恢复原始尺寸与阴影 */
+    private void collapseSpaceForHandles() {
+        if (!spaceExpanded) return;
+        spaceExpanded = false;
+        int space = (int) (HANDLE_SPACE_DP * getResources().getDisplayMetrics().density);
+
+        // 恢复 TextView 高度
+        if (textView != null && savedTvHeight > 0) {
+            ViewGroup.LayoutParams tvLp = textView.getLayoutParams();
+            if (tvLp != null && tvLp.height != ViewGroup.LayoutParams.MATCH_PARENT) {
+                tvLp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                textView.setLayoutParams(tvLp);
+            }
+            savedTvHeight = -1;
+        }
+
+        // 恢复父容器高度
+        View parent = (View) getParent();
+        if (parent != null) {
+            ViewGroup.LayoutParams lp = parent.getLayoutParams();
+            if (lp != null && lp.height > 0) {
+                lp.height -= space;
+                parent.setLayoutParams(lp);
+            }
+        }
+
+        restoreShadowAfterSelect();
+    }
+
+    /** 屏蔽 ShadowLayout 阴影：背景换透明占位并禁止 onSizeChanged 重建位图 */
+    private void disableShadowDuringSelect() {
+        View parent = (View) getParent();
+        if (parent instanceof ShadowLayout) {
+            shadowHost = (ShadowLayout) parent;
+            shadowHost.setInvalidateShadowOnSizeChanged(false);
+            shadowHost.setBackground(new ColorDrawable(Color.TRANSPARENT));
+        }
+    }
+
+    /** 恢复 ShadowLayout 阴影：允许重建并强制重建背景位图 */
+    private void restoreShadowAfterSelect() {
+        if (shadowHost != null) {
+            shadowHost.setBackground(null); // 清除透明占位
+            shadowHost.setInvalidateShadowOnSizeChanged(true);
+            shadowHost.invalidateShadow();  // 强制按当前尺寸重建阴影
+            shadowHost = null;
+        }
     }
 
     // ===================== 高亮绘制 =====================
@@ -418,8 +580,10 @@ public class TextStickerView extends FrameLayout {
     private void updateBtn() {
         ensureBtn(); if (actionBtn == null) return;
         if (!selectMode) { actionBtn.setVisibility(GONE); return; }
-        actionBtn.setText(hasSelection ? getResources().getString(R.string.log_copy) : "完成");
-        actionBtn.setVisibility(VISIBLE);
+        String txt = hasSelection ? getResources().getString(R.string.log_copy) : "完成";
+        if (actionBtn.getVisibility() != VISIBLE) actionBtn.setVisibility(VISIBLE);
+        // 文本未变化就不 setText，避免拖拽过程中按钮反复重排导致卡顿
+        if (!txt.contentEquals(actionBtn.getText())) actionBtn.setText(txt);
     }
 
     private void onActionBtn() {
@@ -441,7 +605,9 @@ public class TextStickerView extends FrameLayout {
     }
 
     private void exitSelectMode() {
-        selectMode = false; clearSelection();
+        selectMode = false;
+        clearSelection();
+        collapseSpaceForHandles();
     }
 
     private void clearSelection() {

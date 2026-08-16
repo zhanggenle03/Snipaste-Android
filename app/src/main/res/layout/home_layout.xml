@@ -5,24 +5,6 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/topbar"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/topbar_height"
-        android:background="@color/app_color_blue"
-        app:titleTextColor="@android:color/white">
-
-        <ImageButton
-            android:id="@+id/topbar_right_change_button"
-            android:layout_width="?attr/actionBarSize"
-            android:layout_height="?attr/actionBarSize"
-            android:layout_gravity="end"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@mipmap/icon_topbar_overflow"
-            android:scaleType="centerInside"
-            app:tint="@android:color/white" />
-    </com.google.android.material.appbar.MaterialToolbar>
-
     <ScrollView
         android:id="@+id/scrollView1"
         android:layout_width="match_parent"

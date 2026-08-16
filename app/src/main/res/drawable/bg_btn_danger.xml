@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 危险操作按钮：实底红 + 白字（删除/清空确认） -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33FFFFFF">
+    <item>
+        <shape>
+            <solid android:color="#D32F2F" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+</ripple>

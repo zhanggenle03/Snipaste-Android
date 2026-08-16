@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 次级操作按钮：浅灰底（取消） -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33000000">
+    <item>
+        <shape>
+            <solid android:color="#F2F2F2" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+</ripple>

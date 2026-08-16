@@ -72,4 +72,42 @@ public class Settings {
                 .putInt(KEY_EDIT_ACTION, action)
                 .apply();
     }
+
+    // ---- 历史记录 ----
+
+    /** 是否记录历史贴图（默认开启） */
+    public static final String KEY_HISTORY_ENABLED = "history_enabled";
+
+    public static boolean getHistoryEnabled(@androidx.annotation.Nullable Context context) {
+        if (context == null) return true;
+        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_HISTORY_ENABLED, true);
+    }
+
+    public static void setHistoryEnabled(@androidx.annotation.Nullable Context context, boolean enabled) {
+        if (context == null) return;
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_HISTORY_ENABLED, enabled)
+                .apply();
+    }
+
+    // ---- 调试模式 ----
+
+    /** 调试模式：开启后 AppLog 才记录详细日志（默认关闭，避免日常无谓 IO） */
+    public static final String KEY_DEBUG_MODE = "debug_mode";
+
+    public static boolean getDebugMode(@androidx.annotation.Nullable Context context) {
+        if (context == null) return false;
+        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_DEBUG_MODE, false);
+    }
+
+    public static void setDebugMode(@androidx.annotation.Nullable Context context, boolean enabled) {
+        if (context == null) return;
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_DEBUG_MODE, enabled)
+                .apply();
+    }
 }

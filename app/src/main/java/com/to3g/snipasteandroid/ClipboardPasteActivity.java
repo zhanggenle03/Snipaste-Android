@@ -9,6 +9,7 @@ import android.os.Looper;
 import android.widget.Toast;
 
 import com.lzf.easyfloat.permission.PermissionUtils;
+import com.to3g.snipasteandroid.lib.AppLog;
 import com.to3g.snipasteandroid.lib.SharePasteHelper;
 
 /**
@@ -52,6 +53,7 @@ public class ClipboardPasteActivity extends Activity {
         String text = readClipboardText();
         if (text != null && !text.trim().isEmpty()) {
             finished = true;
+            AppLog.d("ClipboardPaste", "一键贴文读取成功 尝试次数=" + attempts + " 内容长度=" + text.length());
             doPaste(text);
             return;
         }
@@ -59,6 +61,7 @@ public class ClipboardPasteActivity extends Activity {
             new Handler(Looper.getMainLooper()).postDelayed(this::attemptPaste, RETRY_DELAY_MS);
         } else {
             finished = true;
+            AppLog.d("ClipboardPaste", "一键贴文读取剪切板失败，重试耗尽 次数=" + attempts);
             Toast.makeText(this, getString(R.string.clipboardEmpty), Toast.LENGTH_SHORT).show();
             finish();
         }
@@ -66,10 +69,13 @@ public class ClipboardPasteActivity extends Activity {
 
     private void doPaste(String text) {
         if (PermissionUtils.checkPermission(this)) {
+            AppLog.d("ClipboardPaste", "一键贴文 已有悬浮窗权限");
             SharePasteHelper.showFloatText(this, text);
             finish();
         } else {
+            AppLog.d("ClipboardPaste", "一键贴文 无悬浮窗权限，请求中");
             PermissionUtils.requestPermission(this, granted -> {
+                AppLog.d("ClipboardPaste", "一键贴文 权限结果 granted=" + granted);
                 if (granted) {
                     SharePasteHelper.showFloatText(this, text);
                 } else {

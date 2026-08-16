@@ -30,14 +30,15 @@ import com.lzf.easyfloat.permission.PermissionUtils;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
 import com.to3g.snipasteandroid.databinding.HomeLayoutBinding;
+import com.to3g.snipasteandroid.lib.AppLog;
 import com.to3g.snipasteandroid.lib.ClipBoardUtil;
+import com.to3g.snipasteandroid.lib.DialogUtil;
 import com.to3g.snipasteandroid.lib.Group;
+import com.to3g.snipasteandroid.lib.HistoryStore;
 import com.to3g.snipasteandroid.lib.ImageUtil;
 import com.to3g.snipasteandroid.lib.SharePasteHelper;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
 import com.to3g.snipasteandroid.view.ScaleImage;
-
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -79,7 +80,6 @@ public class HomeFragment extends BaseFragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         binding = HomeLayoutBinding.inflate(inflater, container, false);
-        initTopBar();
         binding.helpTextView.setText(getString(R.string.helpText,
                 getString(R.string.sticker_action_collapse),
                 getString(R.string.sticker_action_close),
@@ -323,12 +323,20 @@ public class HomeFragment extends BaseFragment {
             }
         };
         SharePasteHelper.attachOpacitySlider(getActivity(), path, imageOutterShadow);
+
+        // 记录历史贴图（持久保存，内容去重；相册/拍照的源文件在 cache 目录，会被复制到持久目录）
+        HistoryStore.addImage(requireContext(), new File(path));
+
+        AppLog.d("HomeFragment", "主页贴图图片 path=" + path);
     }
 
     private void initImageView(Bitmap bitmap) {
         ViewGroup.LayoutParams lp = new ViewGroup.LayoutParams(0, 0);
         lp = getDefaultParams(bitmap, lp);
         showImageFloatByBitmap("bitmap", bitmap, lp.width, lp.height);
+        // 记录历史贴图（持久保存，内容去重）
+        HistoryStore.addImage(requireContext(), bitmap);
+        AppLog.d("HomeFragment", "主页贴图图片(bitmap) 尺寸=" + bitmap.getWidth() + "x" + bitmap.getHeight());
     }
 
     private void showImageFloatByBitmap(String tagName, Bitmap bitmap, int initWidth, int initHeight) {
@@ -447,26 +455,8 @@ public class HomeFragment extends BaseFragment {
         if (PermissionUtils.checkPermission(Objects.requireNonNull(getContext()))) {
             action.run();
         } else {
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setMessage(getText(R.string.floatingPermissionText))
-                    .setNegativeButton(R.string.cancelText, (d, i) -> d.dismiss())
-                    .setPositiveButton(R.string.toOpen, (d, i) -> {
-                        d.dismiss();
-                        PermissionUtils.requestPermission(getActivity(), result -> {
-                            if (result) {
-                                action.run();
-                            } else {
-                                Toast.makeText(getContext(), getText(R.string.needFloatingPermission), Toast.LENGTH_SHORT).show();
-                            }
-                        });
-                    })
-                    .show();
+            DialogUtil.showPermissionDialog(requireActivity(), action);
         }
-    }
-
-    private void initTopBar() {
-        binding.topbar.setTitle(getString(R.string.app_name));
-        binding.topbarRightChangeButton.setOnClickListener(v -> clearAllFloatViews());
     }
 
     /**

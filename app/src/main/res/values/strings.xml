@@ -53,12 +53,41 @@
 
     <!-- 底部导航 -->
     <string name="tab_home">主页</string>
+    <string name="tab_history">记录</string>
     <string name="tab_settings">设置</string>
+
+    <!-- 历史贴图记录页 -->
+    <string name="history_title">历史贴图</string>
+    <string name="history_empty">暂无历史记录\n贴过的图片和文字会显示在这里</string>
+    <string name="history_clear">清空</string>
+    <string name="history_clear_confirm_title">清空历史</string>
+    <string name="history_clear_confirm_message">确定清空所有历史贴图记录吗？此操作不可恢复。</string>
+    <string name="history_view_detail">查看详情</string>
+    <string name="history_re_paste">重新贴出</string>
+    <string name="history_delete">删除</string>
+    <string name="history_delete_confirm">删除这条记录？</string>
+    <string name="history_deleted">已删除</string>
+    <string name="history_cleared">已清空历史记录</string>
+    <string name="history_re_pasted">已重新贴出</string>
+    <string name="history_close">关闭</string>
+    <string name="history_image_item">图片贴图</string>
+    <string name="history_text_item">文字贴图</string>
+    <string name="history_filter_all">全部</string>
+    <string name="history_filter_image">图片</string>
+    <string name="history_filter_text">文字</string>
+    <string name="history_count_hint">已记录 %1$d / %2$d 条</string>
+    <string name="history_select">选择</string>
+    <string name="history_cancel_select">取消</string>
+    <string name="history_batch_delete">删除</string>
+    <string name="history_selected_count">已选 %1$d 项</string>
+    <string name="history_selected_of_total">已选 %1$d / %2$d</string>
+    <string name="history_batch_delete_confirm">确定删除选中的 %1$d 条记录吗？</string>
+    <string name="history_batch_deleted">已删除 %1$d 条记录</string>
 
     <!-- 设置页面 -->
     <string name="settings_title">设置</string>
     <string name="settings_general">常规设置</string>
-    <string name="settings_gesture">手势设置</string>
+    <string name="settings_gesture">贴图设置</string>
     <string name="settings_other">其他</string>
     <string name="setting_tile_add">一键贴文</string>
     <string name="tile_remove_manual">「一键贴文」磁贴无法自动移除，请在控制中心编辑区手动移除</string>
@@ -73,6 +102,7 @@
     <string name="zoom_action_icon">图标控制</string>
     <string name="edit_action_double_tap">双击</string>
     <string name="setting_collapse_mode">收起形式</string>
+    <string name="setting_history_enabled">记录历史贴图</string>
     <string name="collapse_mode_thumb">缩略图</string>
     <string name="collapse_mode_strip">贴边条</string>
     <string name="permission_list_title">权限清单</string>
@@ -95,6 +125,9 @@
     <!-- 错误日志 -->
     <string name="log_viewer_title">错误日志</string>
     <string name="log_copy">复制</string>
+    <string name="log_summary_debug_on">调试模式已开启，正在记录日志</string>
+    <string name="log_summary_debug_off">调试模式未开启，不记录日志</string>
+    <string name="log_summary_crash_suffix">，有崩溃记录</string>
     <string name="log_clear">清空</string>
     <string name="log_copied">已复制到剪贴板</string>
     <string name="log_cleared">日志已清空</string>
