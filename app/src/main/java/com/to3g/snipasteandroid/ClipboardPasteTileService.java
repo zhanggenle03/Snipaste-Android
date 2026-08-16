@@ -5,7 +5,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.service.quicksettings.Tile;
 import android.service.quicksettings.TileService;
-import android.util.Log;
+
+import com.to3g.snipasteandroid.lib.AppLog;
 
 /**
  * 控制中心（Quick Settings）磁贴：一键添加后点按即读取剪切板文字并贴成悬浮贴图。
@@ -29,14 +30,14 @@ public class ClipboardPasteTileService extends TileService {
     @Override
     public void onTileAdded() {
         super.onTileAdded();
-        Log.d("ClipboardPasteTile", "磁贴已被添加");
+        AppLog.d("ClipboardPasteTile", "磁贴已被添加");
         saveAddedState(true);
     }
 
     @Override
     public void onTileRemoved() {
         super.onTileRemoved();
-        Log.d("ClipboardPasteTile", "磁贴已被移除");
+        AppLog.d("ClipboardPasteTile", "磁贴已被移除");
         saveAddedState(false);
     }
 
@@ -48,6 +49,7 @@ public class ClipboardPasteTileService extends TileService {
     @Override
     public void onClick() {
         super.onClick();
+        AppLog.d("ClipboardPasteTile", "磁贴被点击，拉起一键贴文");
         Intent intent = new Intent(this, ClipboardPasteActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         PendingIntent pendingIntent = PendingIntent.getActivity(

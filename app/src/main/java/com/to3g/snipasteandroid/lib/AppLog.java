@@ -21,12 +21,15 @@ import java.util.Locale;
 
 /**
  * 轻量全局日志：捕获未处理崩溃 + 记录运行日志，供「错误日志」页面查看/复制。
+ * 仅当设置里开启「调试模式」时才会记录（默认关闭，避免日常无谓 IO）。
  * 不依赖任何第三方库，仅写应用私有 files/logs 目录（无需存储权限）。
  */
 public class AppLog {
-    private static final int MAX_RUNTIME_LINES = 400;
+    private static final int MAX_RUNTIME_LINES = 2000;
+    private static final long MAX_RUNTIME_FILE_BYTES = 1024 * 1024; // 1MB
     private static final Object LOCK = new Object();
 
+    private static Context appContext;
     private static File logDir;
     private static final List<String> runtimeBuffer = new ArrayList<>();
     private static Thread.UncaughtExceptionHandler defaultHandler;
@@ -35,14 +38,17 @@ public class AppLog {
     public static void init(Context context) {
         if (initialized) return;
         initialized = true;
-        logDir = new File(context.getFilesDir(), "logs");
+        appContext = context.getApplicationContext();
+        logDir = new File(appContext.getFilesDir(), "logs");
         if (!logDir.exists()) {
             //noinspection ResultOfMethodCallIgnored
             logDir.mkdirs();
         }
 
+        if (!Settings.getDebugMode(appContext)) return;
+
         d("AppLog", "===== App 启动 =====");
-        d("AppLog", "version: " + versionInfo(context));
+        d("AppLog", "version: " + versionInfo(appContext));
         d("AppLog", "device: " + Build.MANUFACTURER + " " + Build.MODEL + " (SDK " + Build.VERSION.SDK_INT + ")");
 
         defaultHandler = Thread.getDefaultUncaughtExceptionHandler();
@@ -57,6 +63,11 @@ public class AppLog {
         });
     }
 
+    /** 调试模式是否开启（决定是否记录日志） */
+    public static boolean isDebugEnabled() {
+        return appContext != null && Settings.getDebugMode(appContext);
+    }
+
     private static String versionInfo(Context context) {
         try {
             return context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName
@@ -68,7 +79,30 @@ public class AppLog {
 
     /** 记录一条运行日志（含时间戳），同时写入运行日志文件。 */
     public static void d(String tag, String msg) {
-        String line = ts() + " [" + tag + "] " + msg;
+        if (!isDebugEnabled()) return;
+        write("D", tag, msg);
+    }
+
+    /** 记录一条错误日志（含堆栈摘要）。 */
+    public static void e(String tag, String msg) {
+        if (!isDebugEnabled()) return;
+        write("E", tag, msg);
+    }
+
+    /** 记录一条异常日志：完整堆栈（用于排查任何异常）。 */
+    public static void e(String tag, String msg, Throwable throwable) {
+        if (!isDebugEnabled()) return;
+        StringBuilder sb = new StringBuilder(msg);
+        if (throwable != null) {
+            StringWriter sw = new StringWriter();
+            throwable.printStackTrace(new PrintWriter(sw));
+            sb.append("\n").append(sw);
+        }
+        write("E", tag, sb.toString());
+    }
+
+    private static void write(String level, String tag, String msg) {
+        String line = ts() + " [" + level + "][" + tag + "] " + msg;
         synchronized (LOCK) {
             runtimeBuffer.add(line);
             if (runtimeBuffer.size() > MAX_RUNTIME_LINES) {
@@ -86,7 +120,7 @@ public class AppLog {
         } catch (IOException ignored) {
             // 日志写入失败不应影响主流程
         }
-        if (f.length() > 200 * 1024) {
+        if (f.length() > MAX_RUNTIME_FILE_BYTES) {
             trimRuntimeFile(f);
         }
     }
@@ -146,8 +180,11 @@ public class AppLog {
         }
     }
 
-    /** 拼装「错误日志」页面内容：崩溃日志 + 最近运行日志。 */
+    /** 拼装「错误日志」页面内容：崩溃日志 + 最近运行日志。调试模式关闭时给出提示。 */
     public static String getAllLog() {
+        if (!isDebugEnabled()) {
+            return "（调试模式未开启，未记录日志）\n请在 设置 → 其他 → 调试模式 开启后，复现问题再回来查看。";
+        }
         StringBuilder sb = new StringBuilder();
         sb.append("========== 崩溃日志 ==========\n");
         sb.append(getCrashLog());
