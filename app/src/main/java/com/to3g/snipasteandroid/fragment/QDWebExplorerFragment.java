@@ -19,10 +19,9 @@ import android.widget.FrameLayout;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
 import com.to3g.snipasteandroid.databinding.FragmentWebviewExplorerBinding;
+import com.to3g.snipasteandroid.lib.DialogUtil;
 import com.to3g.snipasteandroid.lib.ScreenUtils;
 import com.to3g.snipasteandroid.view.QDWebView;
-
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
@@ -97,18 +96,11 @@ public class QDWebExplorerFragment extends BaseFragment {
                 boolean needConfirm = !url.startsWith("http://qmuiteam.com") && !url.startsWith("https://qmuiteam.com");
                 if (needConfirm) {
                     final String finalURL = url;
-                    new MaterialAlertDialogBuilder(requireContext())
-                            .setMessage("确认下载此文件？")
-                            .setNegativeButton(R.string.cancel, (d, i) -> {
-                                d.dismiss();
-                                popBackStack();
-                            })
-                            .setPositiveButton(R.string.ok, (d, i) -> {
-                                d.dismiss();
+                    DialogUtil.showConfirm(requireContext(), null, "确认下载此文件？",
+                            getString(R.string.ok), false, () -> {
                                 doDownload(finalURL);
                                 popBackStack();
-                            })
-                            .show();
+                            });
                 } else {
                     doDownload(url);
                 }
