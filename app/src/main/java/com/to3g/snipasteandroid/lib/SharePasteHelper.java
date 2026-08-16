@@ -37,13 +37,12 @@ import com.lzf.easyfloat.EasyFloat;
 import com.lzf.easyfloat.enums.ShowPattern;
 import com.lzf.easyfloat.interfaces.OnFloatCallbacks;
 import com.lzf.easyfloat.permission.PermissionUtils;
-import androidx.appcompat.app.AlertDialog;
-import android.view.ContextThemeWrapper;
 import com.to3g.snipasteandroid.QDApplication;
 import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.view.ScaleImage;
 import com.to3g.snipasteandroid.view.TextStickerView;
 
+import java.io.File;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -219,6 +218,7 @@ public class SharePasteHelper {
     public static void handleShareIntent(@NonNull Activity activity, @NonNull Intent intent) {
         String action = intent.getAction();
         String type = intent.getType();
+        AppLog.d("SharePasteHelper", "收到分享 action=" + action + " type=" + type);
 
         if (Intent.ACTION_SEND.equals(action) && type != null) {
             if (type.startsWith("text/")) {
@@ -261,24 +261,7 @@ public class SharePasteHelper {
         if (PermissionUtils.checkPermission(activity)) {
             showFloatText(activity, content);
         } else {
-            // 引导开启悬浮窗权限
-            new AlertDialog.Builder(new ContextThemeWrapper(activity, R.style.AppDialogTheme))
-                    .setMessage(activity.getText(R.string.floatingPermissionText))
-                    .setNegativeButton(activity.getText(R.string.cancelText), (dialog, which) -> dialog.dismiss())
-                    .setPositiveButton(activity.getText(R.string.toOpen),
-                            (dialog, which) -> {
-                                dialog.dismiss();
-                                PermissionUtils.requestPermission(activity, result -> {
-                                    if (result) {
-                                        showFloatText(activity, content);
-                                    } else {
-                                        Toast.makeText(activity,
-                                                activity.getText(R.string.needFloatingPermission),
-                                                Toast.LENGTH_SHORT).show();
-                                    }
-                                });
-                            })
-                    .show();
+            DialogUtil.showPermissionDialog(activity, () -> showFloatText(activity, content));
         }
     }
 
@@ -295,9 +278,11 @@ public class SharePasteHelper {
         if (EasyFloat.getAppFloatView(tag) != null) {
             // 若该贴图已收起（把手可能已丢失），直接恢复而非仅提示"已粘贴"
             if (collapsedTags.contains(tag)) {
+                AppLog.d("SharePasteHelper", "文字贴图已存在且已收起，恢复 tag=" + tag);
                 restoreSticker(tag);
                 return;
             }
+            AppLog.d("SharePasteHelper", "文字贴图已存在，提示已贴出 tag=" + tag);
             Toast.makeText(activity, activity.getText(R.string.textFloated), Toast.LENGTH_SHORT).show();
             return;
         }
@@ -321,27 +306,12 @@ public class SharePasteHelper {
                 Toast.makeText(activity, "无法加载图片", Toast.LENGTH_SHORT).show();
             }
         } else {
-            // 引导开启悬浮窗权限
-            new AlertDialog.Builder(new ContextThemeWrapper(activity, R.style.AppDialogTheme))
-                    .setMessage(activity.getText(R.string.floatingPermissionText))
-                    .setNegativeButton(activity.getText(R.string.cancelText), (dialog, which) -> dialog.dismiss())
-                    .setPositiveButton(activity.getText(R.string.toOpen),
-                            (dialog, which) -> {
-                                dialog.dismiss();
-                                PermissionUtils.requestPermission(activity, result -> {
-                                    if (result) {
-                                        Bitmap bitmap = loadBitmapFromUri(activity, imageUri);
-                                        if (bitmap != null) {
-                                            showImageFloat(activity, bitmap);
-                                        }
-                                    } else {
-                                        Toast.makeText(activity,
-                                                activity.getText(R.string.needFloatingPermission),
-                                                Toast.LENGTH_SHORT).show();
-                                    }
-                                });
-                            })
-                    .show();
+            DialogUtil.showPermissionDialog(activity, () -> {
+                Bitmap bitmap = loadBitmapFromUri(activity, imageUri);
+                if (bitmap != null) {
+                    showImageFloat(activity, bitmap);
+                }
+            });
         }
     }
 
@@ -455,6 +425,13 @@ public class SharePasteHelper {
         // 关闭贴图不再走 X 按钮：拖出屏幕边缘 -> 底部弹出「收起/关闭」选择（见 onStickerDragEnd）。
         // 透明度滑块仍由浮窗 touchEvent -> handleFloatTouch 的双击触发。
         attachOpacitySlider(activity, tag, imageOutterShadow);
+
+        // 记录历史贴图（持久保存，内容去重）
+        HistoryStore.addImage(QDApplication.getContext(), bitmap);
+
+        AppLog.d("SharePasteHelper", "贴图图片 tag=" + tag
+                + " 尺寸=" + bitmap.getWidth() + "x" + bitmap.getHeight()
+                + " naturalSize=" + naturalSize);
     }
 
     // ===================== 文字贴图（TextView 替代 Bitmap） =====================
@@ -577,6 +554,11 @@ public class SharePasteHelper {
 
         // 透明度滑块（双击由 TextStickerView.onInterceptTouchEvent 触发）
         attachOpacitySlider(activity, tag, imageOutterShadow);
+
+        // 记录历史贴图（持久保存，内容去重）
+        HistoryStore.addText(QDApplication.getContext(), text);
+
+        AppLog.d("SharePasteHelper", "贴图文字 tag=" + tag + " 长度=" + text.length());
     }
 
     /**
@@ -996,6 +978,8 @@ public class SharePasteHelper {
         if (EasyFloat.getAppFloatView(tag + SHEET_SUFFIX) != null) return;
         float minX = Math.max(TRIGGER_RATIO * s.winW, TRIGGER_MIN_DP * density());
         boolean triggered = (s.edgeX != 0 && s.overflowX >= minX);
+        AppLog.d("SharePasteHelper", "贴图拖拽结束 tag=" + tag
+                + " overflowX=" + s.overflowX + " 触发操作条=" + triggered);
         if (triggered) {
             showActionSheet(tag);
             // 横向拖出松手后回弹：清除裁切偏移，贴图回到窗口约束位置（已在屏幕内）
@@ -1018,6 +1002,7 @@ public class SharePasteHelper {
      * 主界面仍在时，再额外触发其回调一并关闭主界面自身创建的贴图（最佳努力）。
      */
     public static void closeAllStickers() {
+        AppLog.d("SharePasteHelper", "关闭全部贴图 count=" + helperImageTags.size());
         for (String tag : new ArrayList<>(helperImageTags)) {
             closeSticker(tag);
         }
@@ -1090,10 +1075,12 @@ public class SharePasteHelper {
             EasyFloat.hideAppFloat(tag);
         } catch (Exception e) {
             Log.e(TAG, "hideAppFloat failed: " + e.getMessage());
+            AppLog.e("SharePasteHelper", "hideAppFloat 失败 tag=" + tag, e);
         }
         collapsedTags.add(tag);
         // 按设置选择收起形式：贴边条 / 缩略图
         int mode = Settings.getCollapseMode(QDApplication.getContext());
+        AppLog.d("SharePasteHelper", "收起贴图 tag=" + tag + " 形式=" + mode);
         if (mode == Settings.COLLAPSE_MODE_STRIP) {
             int cx = (r != null) ? r.centerX() : screen.x / 2;
             int cy = (r != null) ? r.centerY() : screen.y / 2;
@@ -1325,6 +1312,7 @@ public class SharePasteHelper {
 
     /** 点击收起把手 -> 恢复贴图（清除裁切，归位到屏幕内、完整可见） */
     public static void restoreSticker(@NonNull String tag) {
+        AppLog.d("SharePasteHelper", "恢复贴图 tag=" + tag);
         try {
             EasyFloat.dismissAppFloat(tag + HANDLE_SUFFIX);
         } catch (Exception e) {
@@ -1348,6 +1336,7 @@ public class SharePasteHelper {
 
     /** 彻底关闭贴图：关闭把手/操作条/透明度滑块/贴图本体（清场时调用） */
     public static void closeSticker(@NonNull String tag) {
+        AppLog.d("SharePasteHelper", "关闭贴图 tag=" + tag);
         dismissActionSheet(tag);
         try {
             EasyFloat.dismissAppFloat(tag + HANDLE_SUFFIX);
@@ -1369,6 +1358,32 @@ public class SharePasteHelper {
 
     private static void showImageFloat(@NonNull Activity activity, @NonNull Bitmap bitmap) {
         showImageFloatWithTag(activity, bitmap, "share_image_" + System.currentTimeMillis(), false);
+    }
+
+    /**
+     * 从本地图片文件重新贴出（历史记录页「重新贴出」入口）。
+     * 含悬浮窗权限检查；成功后走标准图片贴图流程（并会刷新该内容的历史记录时间）。
+     */
+    public static void pasteImageFromFile(@NonNull Activity activity, @NonNull String filePath) {
+        File f = new File(filePath);
+        if (!f.exists()) {
+            Toast.makeText(activity, activity.getText(R.string.file_access_failed), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (PermissionUtils.checkPermission(activity)) {
+            showPastedImageFromFile(activity, filePath);
+        } else {
+            DialogUtil.showPermissionDialog(activity, () -> showPastedImageFromFile(activity, filePath));
+        }
+    }
+
+    private static void showPastedImageFromFile(@NonNull Activity activity, @NonNull String filePath) {
+        Bitmap bitmap = BitmapFactory.decodeFile(filePath);
+        if (bitmap == null) {
+            Toast.makeText(activity, activity.getText(R.string.file_access_failed), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        showImageFloatWithTag(activity, bitmap, "history_" + System.currentTimeMillis(), false);
     }
 
     // ---------- 工具方法 ----------
