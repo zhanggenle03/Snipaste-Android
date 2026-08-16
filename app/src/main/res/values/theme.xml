@@ -38,6 +38,10 @@
 
 
     <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- 状态栏：白色背景 + 深色图标文字（原 M3 默认紫色调） -->
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+
         <!-- 配置Android提供的theme -->
         <item name="android:textAppearanceListItemSmall">@style/QDTextAppearanceListItemSmall</item>
         <item name="android:textAppearanceListItem">@style/QDtextAppearanceListItem</item>
