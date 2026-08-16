@@ -11,9 +11,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
-import android.view.ContextThemeWrapper;
 import android.widget.TextView;
 
+import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.to3g.snipasteandroid.ClipboardPasteTileService;
 import com.to3g.snipasteandroid.LogViewerActivity;
 import com.to3g.snipasteandroid.PermissionListActivity;
@@ -21,12 +21,11 @@ import com.to3g.snipasteandroid.R;
 import com.to3g.snipasteandroid.base.BaseFragment;
 import com.to3g.snipasteandroid.databinding.FragmentSettingsBinding;
 import com.to3g.snipasteandroid.lib.AppLog;
+import com.to3g.snipasteandroid.lib.DialogUtil;
 import com.to3g.snipasteandroid.lib.Group;
 import com.to3g.snipasteandroid.lib.ScreenUtils;
 import com.to3g.snipasteandroid.lib.Settings;
 import com.to3g.snipasteandroid.lib.annotation.Widget;
-
-import androidx.appcompat.app.AlertDialog;
 
 @Widget(group = Group.Other, name = "设置")
 public class SettingsFragment extends BaseFragment {
@@ -35,7 +34,7 @@ public class SettingsFragment extends BaseFragment {
     private SharedPreferences tilePrefs;
     private View tileStatusRow;
     private TextView tileStatusText;
-    private TextView logDetailText;
+    private TextView logSummaryText;
     private SharedPreferences.OnSharedPreferenceChangeListener tilePrefListener;
     private Dialog guideDialog;
 
@@ -44,7 +43,6 @@ public class SettingsFragment extends BaseFragment {
         binding = FragmentSettingsBinding.inflate(inflater, container, false);
         tilePrefs = requireContext().getSharedPreferences(
                 ClipboardPasteTileService.PREF_NAME, Context.MODE_PRIVATE);
-        initTopBar();
         initGeneralSection();
         initGestureSection();
         initOtherSection();
@@ -56,8 +54,8 @@ public class SettingsFragment extends BaseFragment {
         super.onResume();
         // 回到设置页时按磁贴真实状态刷新文字：手动移除/添加后也能即时反映
         refreshTileStatus();
-        // 回到设置页时刷新错误日志是否有未读崩溃的提示
-        updateLogDetail();
+        // 回到设置页时刷新错误日志条目（调试状态 + 崩溃提示）
+        updateLogSummary();
     }
 
     @Override
@@ -89,18 +87,29 @@ public class SettingsFragment extends BaseFragment {
         dismissGuideDialog();
     }
 
-    private void initTopBar() {
-        binding.topbar.setTitle(getString(R.string.settings_title));
-    }
-
     private void initGeneralSection() {
         addSectionTitle(binding.settingsGeneral, getString(R.string.settings_general));
         addTileStatusItem(binding.settingsGeneral);
-        addCollapseModeItem(binding.settingsGeneral);
+        addHistorySwitchItem(binding.settingsGeneral);
     }
 
     /**
-     * 收起形式：缩略图 / 贴边条。点击弹出单选，选择后写入 Settings，
+     * 「记录历史贴图」开关：关闭后贴图不再写入历史记录（已存在的历史不受影响，仍可查看/删除）。
+     */
+    private void addHistorySwitchItem(ViewGroup parent) {
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_setting_switch, parent, false);
+        ((TextView) row.findViewById(R.id.title)).setText(getString(R.string.setting_history_enabled));
+        SwitchMaterial switchView = row.findViewById(R.id.switch_view);
+        switchView.setChecked(Settings.getHistoryEnabled(requireContext()));
+        switchView.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            AppLog.d("Settings", "history_enabled_change=" + isChecked);
+            Settings.setHistoryEnabled(requireContext(), isChecked);
+        });
+        parent.addView(row);
+    }
+
+    /**
+     * 收起形式：缩略图 / 贴边条。点击弹出单选（自绘弹窗），选择后写入 Settings，
      * 下次收起贴图时生效（已收起的贴图保持原把手，不强制重建）。
      */
     private void addCollapseModeItem(ViewGroup parent) {
@@ -115,29 +124,16 @@ public class SettingsFragment extends BaseFragment {
             AppLog.d("Settings", "collapse_mode_click");
             int cur = Settings.getCollapseMode(requireContext());
             int checked = (cur == Settings.COLLAPSE_MODE_STRIP) ? 1 : 0;
-            // 用纯 AppCompat 弹窗主题包裹 Context 创建 AlertDialog，绕开 Material3 的 dialog overlay。
-            // 根因（vivo SDK36 实测崩溃栈）：AppTheme=Theme.Material3，其 alertDialogTheme 让弹窗套
-            // ThemeOverlay.Material3.Dialog.Alert，单选列表布局被重定向到 Material 的
-            // select_dialog_singlechoice_material，该布局引用的 M2 attr(dialogPreferredPadding 等)
-            // 在 M3 overlay 下解析失败 -> InflateException(CheckedTextView)。改包裹
-            // ContextThemeWrapper(..., R.style.AppDialogTheme) 后弹窗套 AppCompat 主题、不继承
-            // Material3 overlay，单选列表正常 inflate。视觉为 AppCompat 默认风格（朴素、跨 ROM 一致）。
-            new AlertDialog.Builder(new ContextThemeWrapper(requireContext(), R.style.AppDialogTheme))
-                    .setTitle(R.string.setting_collapse_mode)
-                    .setSingleChoiceItems(new CharSequence[]{
+            DialogUtil.showSingleChoice(requireContext(), getString(R.string.setting_collapse_mode),
+                    new CharSequence[]{
                             getString(R.string.collapse_mode_thumb),
                             getString(R.string.collapse_mode_strip)
-                    }, checked, (dialog, which) -> {
+                    }, checked, (which, option) -> {
                         AppLog.d("Settings", "collapse_mode_select which=" + which);
                         Settings.setCollapseMode(requireContext(),
                                 which == 1 ? Settings.COLLAPSE_MODE_STRIP : Settings.COLLAPSE_MODE_THUMB);
-                        detail.setText(which == 1
-                                ? getString(R.string.collapse_mode_strip)
-                                : getString(R.string.collapse_mode_thumb));
-                        dialog.dismiss();
-                    })
-                    .setNegativeButton(R.string.cancelText, (d, w) -> d.dismiss())
-                    .show();
+                        detail.setText(option);
+                    });
         });
         parent.addView(row);
     }
@@ -205,12 +201,13 @@ public class SettingsFragment extends BaseFragment {
         addSectionTitle(binding.settingsGesture, getString(R.string.settings_gesture));
         addGestureActionItem(binding.settingsGesture, R.string.setting_zoom_sticker, GESTURE_ZOOM);
         addGestureActionItem(binding.settingsGesture, R.string.setting_edit_sticker, GESTURE_EDIT);
+        // 「收起形式」也属于贴图行为设置，放在手势设置（贴图设置）分区内
+        addCollapseModeItem(binding.settingsGesture);
     }
 
     /**
-     * 手势动作项（chevron 行）：右侧 detail 显示当前选中的动作名；点击弹单选框选择动作。
+     * 手势动作项（chevron 行）：右侧 detail 显示当前选中的动作名；点击弹自绘单选弹窗选择动作。
      * 当前每个手势仅 1 个可选动作（即当前正在用的手势），后续扩充时往 options/取值映射加项即可。
-     * 弹窗用 AppCompat 主题包裹（与 addCollapseModeItem 同理，绕开 Material3 dialog overlay 崩溃）。
      */
     private void addGestureActionItem(ViewGroup parent, int titleRes, int gestureType) {
         View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_setting_chevron, parent, false);
@@ -240,29 +237,61 @@ public class SettingsFragment extends BaseFragment {
             int curIndex = (gestureType == GESTURE_ZOOM)
                     ? ((cur == Settings.ZOOM_ACTION_ICON) ? 0 : -1)
                     : ((cur == Settings.EDIT_ACTION_DOUBLE_TAP) ? 0 : -1);
-            new AlertDialog.Builder(new ContextThemeWrapper(requireContext(), R.style.AppDialogTheme))
-                    .setTitle(titleRes)
-                    .setSingleChoiceItems(options, Math.max(curIndex, 0), (dialog, which) -> {
+            DialogUtil.showSingleChoice(requireContext(), getString(titleRes), options, Math.max(curIndex, 0),
+                    (which, option) -> {
                         AppLog.d("Settings", "gesture_action_select type=" + gestureType + " which=" + which);
                         if (gestureType == GESTURE_ZOOM) {
                             Settings.setZoomAction(requireContext(), Settings.ZOOM_ACTION_ICON);
                         } else {
                             Settings.setEditAction(requireContext(), Settings.EDIT_ACTION_DOUBLE_TAP);
                         }
-                        detail.setText(options[which]);
-                        dialog.dismiss();
-                    })
-                    .setNegativeButton(R.string.cancelText, (d, w) -> d.dismiss())
-                    .show();
+                        detail.setText(option);
+                    });
         });
         parent.addView(row);
     }
 
-    /** 其他：权限清单、错误日志，均以与上面一致的列表项形式呈现（不再用按钮）。 */
+    /** 其他：错误日志（含调试模式开关）、权限清单，均以与上面一致的列表项形式呈现。 */
     private void initOtherSection() {
         addSectionTitle(binding.settingsOther, getString(R.string.settings_other));
-        addPermissionEntry(binding.settingsOther);
         addLogEntry(binding.settingsOther);
+        addPermissionEntry(binding.settingsOther);
+    }
+
+    /** 「错误日志」列表项：右侧开关=调试模式；点击标题/说明区域进入日志查看页。 */
+    private void addLogEntry(ViewGroup parent) {
+        View row = LayoutInflater.from(requireContext())
+                .inflate(R.layout.item_setting_switch_summary, parent, false);
+        ((TextView) row.findViewById(R.id.title)).setText(R.string.log_entry_title);
+        logSummaryText = row.findViewById(R.id.summary);
+        SwitchMaterial switchView = row.findViewById(R.id.switch_view);
+        switchView.setChecked(Settings.getDebugMode(requireContext()));
+        switchView.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            Settings.setDebugMode(requireContext(), isChecked);
+            AppLog.d("Settings", "debug_mode_change=" + isChecked);
+            updateLogSummary();
+        });
+        // 点击行（开关区域除外）进入错误日志页
+        row.setOnClickListener(v -> {
+            AppLog.d("Settings", "log_entry_click");
+            startActivity(new Intent(requireContext(), LogViewerActivity.class));
+        });
+        updateLogSummary();
+        parent.addView(row);
+    }
+
+    /** 刷新错误日志条目的副标题：调试状态 + 崩溃提示。 */
+    private void updateLogSummary() {
+        if (logSummaryText == null) return;
+        boolean debug = Settings.getDebugMode(requireContext());
+        String s = getString(debug ? R.string.log_summary_debug_on : R.string.log_summary_debug_off);
+        if (AppLog.hasCrash()) {
+            s += getString(R.string.log_summary_crash_suffix);
+        }
+        logSummaryText.setText(s);
+        logSummaryText.setTextColor(AppLog.hasCrash()
+                ? Color.parseColor("#D32F2F")
+                : Color.parseColor("#999999"));
     }
 
     /** 「权限清单」列表项：点击进入权限清单页。 */
@@ -274,30 +303,6 @@ public class SettingsFragment extends BaseFragment {
             startActivity(new Intent(requireContext(), PermissionListActivity.class));
         });
         parent.addView(row);
-    }
-
-    /** 「错误日志」列表项：点击进入日志查看页；有未读崩溃时详情标红提示。 */
-    private void addLogEntry(ViewGroup parent) {
-        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_setting_chevron, parent, false);
-        ((TextView) row.findViewById(R.id.title)).setText(R.string.log_entry_title);
-        logDetailText = row.findViewById(R.id.detail);
-        updateLogDetail();
-        row.setOnClickListener(v -> {
-            AppLog.d("Settings", "log_entry_click");
-            startActivity(new Intent(requireContext(), LogViewerActivity.class));
-        });
-        parent.addView(row);
-    }
-
-    private void updateLogDetail() {
-        if (logDetailText == null) return;
-        if (AppLog.hasCrash()) {
-            logDetailText.setText(R.string.log_entry_detail_crash);
-            logDetailText.setTextColor(Color.parseColor("#D32F2F"));
-        } else {
-            logDetailText.setText(R.string.log_entry_detail);
-            logDetailText.setTextColor(Color.parseColor("#999999"));
-        }
     }
 
     private void addSectionTitle(ViewGroup parent, String title) {
