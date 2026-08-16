@@ -15,7 +15,8 @@ import androidx.core.content.ContextCompat;
 public class CustomRootView extends FrameLayout {
 
     public static final int TAB_HOME = 0;
-    public static final int TAB_SETTINGS = 1;
+    public static final int TAB_HISTORY = 1;
+    public static final int TAB_SETTINGS = 2;
 
     public interface OnTabSelectedListener {
         void onTabSelected(int index);
@@ -23,10 +24,13 @@ public class CustomRootView extends FrameLayout {
 
     private FrameLayout fragmentContainer;
     private LinearLayout tabHome;
+    private LinearLayout tabHistory;
     private LinearLayout tabSettings;
     private ImageView tabHomeIcon;
+    private ImageView tabHistoryIcon;
     private ImageView tabSettingsIcon;
     private TextView tabHomeLabel;
+    private TextView tabHistoryLabel;
     private TextView tabSettingsLabel;
     private OnTabSelectedListener listener;
 
@@ -52,14 +56,20 @@ public class CustomRootView extends FrameLayout {
         addView(root);
 
         tabHome = bottomNav.findViewById(R.id.tab_home);
+        tabHistory = bottomNav.findViewById(R.id.tab_history);
         tabSettings = bottomNav.findViewById(R.id.tab_settings);
         tabHomeIcon = bottomNav.findViewById(R.id.tab_home_icon);
+        tabHistoryIcon = bottomNav.findViewById(R.id.tab_history_icon);
         tabSettingsIcon = bottomNav.findViewById(R.id.tab_settings_icon);
         tabHomeLabel = bottomNav.findViewById(R.id.tab_home_label);
+        tabHistoryLabel = bottomNav.findViewById(R.id.tab_history_label);
         tabSettingsLabel = bottomNav.findViewById(R.id.tab_settings_label);
 
         tabHome.setOnClickListener(v -> {
             if (listener != null) listener.onTabSelected(TAB_HOME);
+        });
+        tabHistory.setOnClickListener(v -> {
+            if (listener != null) listener.onTabSelected(TAB_HISTORY);
         });
         tabSettings.setOnClickListener(v -> {
             if (listener != null) listener.onTabSelected(TAB_SETTINGS);
@@ -73,12 +83,13 @@ public class CustomRootView extends FrameLayout {
     }
 
     public void setSelectedTab(int index) {
-        boolean homeSelected = index == TAB_HOME;
         int selectedColor = ContextCompat.getColor(getContext(), R.color.app_color_blue);
         int normalColor = ContextCompat.getColor(getContext(), R.color.app_color_gray_6);
-        tabHomeIcon.setColorFilter(homeSelected ? selectedColor : normalColor, PorterDuff.Mode.SRC_IN);
-        tabHomeLabel.setTextColor(homeSelected ? selectedColor : normalColor);
-        tabSettingsIcon.setColorFilter(homeSelected ? normalColor : selectedColor, PorterDuff.Mode.SRC_IN);
-        tabSettingsLabel.setTextColor(homeSelected ? normalColor : selectedColor);
+        tabHomeIcon.setColorFilter(index == TAB_HOME ? selectedColor : normalColor, PorterDuff.Mode.SRC_IN);
+        tabHomeLabel.setTextColor(index == TAB_HOME ? selectedColor : normalColor);
+        tabHistoryIcon.setColorFilter(index == TAB_HISTORY ? selectedColor : normalColor, PorterDuff.Mode.SRC_IN);
+        tabHistoryLabel.setTextColor(index == TAB_HISTORY ? selectedColor : normalColor);
+        tabSettingsIcon.setColorFilter(index == TAB_SETTINGS ? selectedColor : normalColor, PorterDuff.Mode.SRC_IN);
+        tabSettingsLabel.setTextColor(index == TAB_SETTINGS ? selectedColor : normalColor);
     }
 }

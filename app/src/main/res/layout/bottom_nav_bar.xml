@@ -44,6 +44,32 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/tab_history"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@android:color/white"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:id="@+id/tab_history_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                app:srcCompat="@drawable/ic_history" />
+
+            <TextView
+                android:id="@+id/tab_history_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="@string/tab_history"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/tab_settings"
             android:layout_width="0dp"
             android:layout_height="match_parent"

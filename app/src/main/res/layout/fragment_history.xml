@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- 类型筛选 + 记录计数 -->
+    <LinearLayout
+        android:id="@+id/filterBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/white"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="4dp">
+
+        <TextView
+            android:id="@+id/filterAll"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_btn_primary"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/history_filter_all"
+            android:textColor="@android:color/white"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/filterImage"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_btn_action_gray"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/history_filter_image"
+            android:textColor="#666666"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/filterText"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_btn_action_gray"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/history_filter_text"
+            android:textColor="#666666"
+            android:textSize="13sp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/countHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:textColor="@color/app_color_gray_6"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@android:color/white">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:padding="4dp" />
+
+        <TextView
+            android:id="@+id/emptyView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:lineSpacingExtra="6dp"
+            android:text="@string/history_empty"
+            android:textColor="@color/app_color_gray_6"
+            android:textSize="14sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- 底部操作栏上分隔线 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1px"
+        android:background="@color/bar_divider" />
+
+    <!-- 底部操作栏（仅选择模式显示）：取消（左） 清空/删除（右） -->
+    <LinearLayout
+        android:id="@+id/bottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="@android:color/white"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/bottomCancel"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/history_cancel_select"
+            android:textColor="#666666"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/bottomClear"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:text="@string/history_clear"
+            android:textColor="#666666"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/bottomCount"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="#333333"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/bottomDelete"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_btn_action_gray"
+            android:gravity="center"
+            android:paddingStart="28dp"
+            android:paddingEnd="28dp"
+            android:text="@string/history_batch_delete"
+            android:textColor="#999999"
+            android:textSize="14sp" />
+    </LinearLayout>
+</LinearLayout>

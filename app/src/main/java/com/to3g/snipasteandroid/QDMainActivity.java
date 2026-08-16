@@ -9,6 +9,7 @@ import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
 import com.to3g.snipasteandroid.base.BaseFragmentActivity;
+import com.to3g.snipasteandroid.fragment.HistoryFragment;
 import com.to3g.snipasteandroid.fragment.HomeFragment;
 import com.to3g.snipasteandroid.fragment.SettingsFragment;
 
@@ -16,10 +17,12 @@ public class QDMainActivity extends BaseFragmentActivity {
     private static final String TAG = "QDMainActivity";
     private static final String KEY_CURRENT_TAB = "current_tab";
     private static final String TAG_HOME = "home";
+    private static final String TAG_HISTORY = "history";
     private static final String TAG_SETTINGS = "settings";
 
     private CustomRootView mRootView;
     private HomeFragment mHomeFragment;
+    private HistoryFragment mHistoryFragment;
     private SettingsFragment mSettingsFragment;
     private int mCurrentTab = CustomRootView.TAB_HOME;
 
@@ -47,7 +50,8 @@ public class QDMainActivity extends BaseFragmentActivity {
     }
 
     /**
-     * 主页(HomeFragment)与设置页(SettingsFragment)通过 show/hide 在底部导航间切换。
+     * 主页(HomeFragment)、记录页(HistoryFragment)与设置页(SettingsFragment)
+     * 通过 show/hide 在底部导航间切换。
      * 其余子页面（如 WebExplorer）通过 startFragment 以 replace + 返回栈方式压入同一容器。
      */
     private void ensureFragments() {
@@ -57,6 +61,14 @@ public class QDMainActivity extends BaseFragmentActivity {
             if (mHomeFragment == null) {
                 mHomeFragment = new HomeFragment();
                 fm.beginTransaction().add(R.id.snipaste_demo, mHomeFragment, TAG_HOME).commitNow();
+            }
+        }
+        if (mHistoryFragment == null) {
+            mHistoryFragment = (HistoryFragment) fm.findFragmentByTag(TAG_HISTORY);
+            if (mHistoryFragment == null) {
+                mHistoryFragment = new HistoryFragment();
+                fm.beginTransaction().add(R.id.snipaste_demo, mHistoryFragment, TAG_HISTORY)
+                        .hide(mHistoryFragment).commitNow();
             }
         }
         if (mSettingsFragment == null) {
@@ -70,11 +82,11 @@ public class QDMainActivity extends BaseFragmentActivity {
     }
 
     private void switchToTab(int index) {
-        if (index == mCurrentTab && mHomeFragment != null && mSettingsFragment != null) {
+        if (index == mCurrentTab && mHomeFragment != null && mHistoryFragment != null && mSettingsFragment != null) {
             return;
         }
         ensureFragments();
-        if (mHomeFragment == null || mSettingsFragment == null) {
+        if (mHomeFragment == null || mHistoryFragment == null || mSettingsFragment == null) {
             return;
         }
         mCurrentTab = index;
@@ -84,10 +96,13 @@ public class QDMainActivity extends BaseFragmentActivity {
 
     private void applyTab(int index) {
         FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+        ft.hide(mHomeFragment).hide(mHistoryFragment).hide(mSettingsFragment);
         if (index == CustomRootView.TAB_HOME) {
-            ft.hide(mSettingsFragment).show(mHomeFragment);
+            ft.show(mHomeFragment);
+        } else if (index == CustomRootView.TAB_HISTORY) {
+            ft.show(mHistoryFragment);
         } else {
-            ft.hide(mHomeFragment).show(mSettingsFragment);
+            ft.show(mSettingsFragment);
         }
         ft.commit();
     }
@@ -99,8 +114,8 @@ public class QDMainActivity extends BaseFragmentActivity {
             getSupportFragmentManager().popBackStack();
             return;
         }
-        // 处于「设置」页时，返回键回到「主页」而非直接退出
-        if (mCurrentTab == CustomRootView.TAB_SETTINGS) {
+        // 处于「记录 / 设置」页时，返回键回到「主页」而非直接退出
+        if (mCurrentTab != CustomRootView.TAB_HOME) {
             switchToTab(CustomRootView.TAB_HOME);
             return;
         }
